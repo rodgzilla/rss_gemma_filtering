@@ -8,3 +8,4 @@ build/
 .env
 seen_entries.json
 interest_profile.md
+mock_vault/Filtered feed/

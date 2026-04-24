@@ -1,4 +1,7 @@
-from dataclasses import dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass
@@ -25,3 +28,4 @@ class FilterResult:
     entry: RSSEntry
     keep: bool
     reason: str
+    score: Optional[float] = field(default=None)  # Relevance score 0–1, set by reranker
