@@ -9,16 +9,9 @@
       <outline text="cs - Artificial Intelligence" type="rss" xmlUrl="https://arxiv.org/rss/cs.AI" htmlUrl="http://arxiv.org/" description="cs.AI updates on the arXiv.org e-print archive."/>
       <outline text="cs - Computers and Society" type="rss" xmlUrl="https://arxiv.org/rss/cs.CY" htmlUrl="http://arxiv.org/" description="cs.CY updates on the arXiv.org e-print archive."/>
       <outline text="cs - Cryptography and Security" type="rss" xmlUrl="https://arxiv.org/rss/cs.CR" htmlUrl="http://arxiv.org/" description="cs.CR updates on the arXiv.org e-print archive."/>
-      <outline text="cs - Data Structures and Algorithms" type="rss" xmlUrl="https://arxiv.org/rss/cs.DS" htmlUrl="http://arxiv.org/" description="cs.DS updates on the arXiv.org e-print archive."/>
-      <outline text="cs - Formal Languages and Automata Theory" type="rss" xmlUrl="https://arxiv.org/rss/cs.FL" htmlUrl="http://arxiv.org/" description="cs.FL updates on the arXiv.org e-print archive."/>
-      <outline text="cs - Information retrieval" type="rss" xmlUrl="https://rss.arxiv.org/rss/cs.IR/" htmlUrl="http://arxiv.org/" description="cs.IR updates on the arXiv.org e-print archive."/>
       <outline text="cs - Machine Learning" type="rss" xmlUrl="https://arxiv.org/rss/cs.LG" htmlUrl="http://arxiv.org/" description="cs.LG updates on the arXiv.org e-print archive."/>
       <outline text="cs - Neural and Evolutionary Computation" type="rss" xmlUrl="https://arxiv.org/rss/cs.NE" htmlUrl="http://arxiv.org/" description="cs.NE updates on the arXiv.org e-print archive."/>
       <outline text="cs - Social and Information Networks" type="rss" xmlUrl="https://arxiv.org/rss/cs.SI" htmlUrl="http://arxiv.org/" description="cs.SI updates on the arXiv.org e-print archive."/>
-      <outline text="math - Combinatorics" type="rss" xmlUrl="https://arxiv.org/rss/math.CO" htmlUrl="http://arxiv.org/" description="math.CO updates on the arXiv.org e-print archive."/>
-      <outline text="math - Dynamical Systems" type="rss" xmlUrl="https://arxiv.org/rss/math.DS" htmlUrl="http://arxiv.org/" description="math.DS updates on the arXiv.org e-print archive."/>
-      <outline text="nlin - Nonlinear sciences" type="rss" xmlUrl="https://rss.arxiv.org/rss/nlin" htmlUrl="http://arxiv.org/" description="nlin updates on the arXiv.org e-print archive."/>
-      <outline text="physics - Physics and Society" type="rss" xmlUrl="http://export.arxiv.org/rss/physics.soc-ph/recent" htmlUrl="http://arxiv.org/" description="Physics -- Physics and Society (physics.soc-ph) updates on the arXiv.org e-print archive"/>
     </outline>
     <outline text="Autre">
       <outline text="AlgoRythmes Blog de maths" type="rss" xmlUrl="https://www.blogger.com/feeds/7170062817138287405/posts/default" htmlUrl="http://algorythmes.blogspot.com/" description="Bienvenue aux &quot;amatheurs et amathrices&quot; de culture mathématique et d'enseignement."/>
@@ -50,7 +43,6 @@
       <outline text="Import AI" type="rss" xmlUrl="https://jack-clark.net/feed/" htmlUrl="https://jack-clark.net" description=""/>
       <outline text="inFERENCe" type="rss" xmlUrl="https://www.inference.vc/rss/" htmlUrl="https://www.inference.vc/" description="posts on machine learning, statistics, opinions on things I'm reading in the space"/>
       <outline text="Infographics – FlowingData" type="rss" xmlUrl="https://flowingdata.com/category/visualization/infographics/feed/" htmlUrl="https://flowingdata.com" description="Strength in Numbers"/>
-      <outline text="KDnuggets" type="rss" xmlUrl="http://feeds.feedburner.com/kdnuggets-data-mining-analytics" htmlUrl="https://www.kdnuggets.com" description="Data Science, Machine Learning, AI &amp; Analytics"/>
       <outline text="Lex Fridman Podcast" type="rss" xmlUrl="https://lexfridman.com/feed/podcast/" htmlUrl="https://lexfridman.com/podcast" description="Conversations that explore technology, history, philosophy, physics, mathematics, biology, chemistry, engineering, AI, robotics, programming, music, film, art, sports, psychology, neuroscience, geopolitics, business, economics, religion, astronomy, and the human condition with people from all walks of life."/>
       <outline text="LocalLlama" type="rss" xmlUrl="https://rss.app/feeds/83njPVWGtQPaNoho.xml" htmlUrl="https://www.reddit.com/r/LocalLLaMA" description="LocalLlama"/>
       <outline text="Machine Learning" type="rss" xmlUrl="https://www.reddit.com/r/MachineLearning/top/.rss?t=day&amp;limit=5" htmlUrl="https://www.reddit.com/r/MachineLearning/" description="Beginners -&gt; /r/mlquestions or /r/learnmachinelearning , AGI -&gt; /r/singularity, career advices -&gt; /r/cscareerquestions, datasets -&gt; r/datasets"/>
@@ -89,7 +81,6 @@
       <outline text="cleverhans.io" type="rss" xmlUrl="http://www.cleverhans.io/feed.xml" htmlUrl="http://cleverhans.io/" description="Jekyll blog associated with cleverhans"/>
       <outline text="Hacker News: Show HN" type="rss" xmlUrl="https://hnrss.org/show?points=100" htmlUrl="https://news.ycombinator.com/shownew" description="Hacker News RSS"/>
       <outline text="Korben" type="rss" xmlUrl="https://korben.info/feed" htmlUrl="https://korben.info" description="Découvrez les dernières actualités tech, astuces et analyses sur Korben.info"/>
-      <outline text="Le Journal du Geek" type="rss" xmlUrl="https://www.journaldugeek.com/feed/" htmlUrl="https://www.journaldugeek.com" description="Journal du Geek - Source d'actualité High-tech : téléphone mobile, tablette, gadgets... tout l'univers Geek !"/>
       <outline text="Quanta Magazine" type="rss" xmlUrl="https://www.quantamagazine.org/feed/" htmlUrl="https://www.quantamagazine.org" description="Illuminating science"/>
       <outline text="The Ars Technicast" type="rss" xmlUrl="https://publicfeeds.net/f/7487/ars-technicast" htmlUrl="http://www.arstechnica.com" description="&lt;p&gt;The Ars Technicast is the official podcast from Ars Technica, where we bring you you the latest in the worlds of computing, technology, science, and everything else in between. Ars publishes original news and reviews, analysis of tech trends, and expert advice on the most fundamental aspects of tech and the many ways it's helping us enjoy our world.&lt;/p&gt;"/>
       <outline text="The blog at the bottom of the sea" type="rss" xmlUrl="https://blog.demofox.org/feed/" htmlUrl="https://blog.demofox.org" description="Programming, Graphics, Gamedev, Exotic Computation, Audio Synthesis"/>

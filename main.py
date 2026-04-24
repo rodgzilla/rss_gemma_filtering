@@ -16,6 +16,7 @@ from rss_filter.note_writer import write_note
 from rss_filter.notes_parser import parse_vault
 from rss_filter.prefilter import prefilter_entries
 from rss_filter.relevance_filter import filter_entries_batch
+from rss_filter.reranker import rerank
 from rss_filter.rss_fetcher import (
     fetch_feed,
     filter_by_age,
@@ -104,6 +105,18 @@ def main(argv: list[str] | None = None) -> None:
         default=300,
         metavar="N",
         help="Characters of summary shown to the LLM in pass 2 (default: 300)",
+    )
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Re-rank kept entries by relevance score before writing the note",
+    )
+    parser.add_argument(
+        "--rerank-batch-size",
+        type=int,
+        default=20,
+        metavar="N",
+        help="Number of entries per re-ranking LLM call (default: 20)",
     )
     parser.add_argument(
         "--dry-run",
@@ -226,19 +239,45 @@ def main(argv: list[str] | None = None) -> None:
         f"  Kept {kept} / {len(all_entries)} entries ({len(llm_candidates)} evaluated by LLM)."
     )
 
-    # --- Step 4: Output ---
+    # --- Step 4: Re-rank (optional) ---
+    if args.rerank and kept > 0:
+        print(
+            f"  Re-ranking {len(reading_results)} reading + {len(arxiv_results)} arxiv entries…"
+        )
+        if reading_results:
+            reading_results = rerank(
+                reading_results,
+                profile,
+                client,
+                model=model,
+                temperature=temperature,
+                batch_size=args.rerank_batch_size,
+            )
+        if arxiv_results:
+            arxiv_results = rerank(
+                arxiv_results,
+                profile,
+                client,
+                model=model,
+                temperature=temperature,
+                batch_size=args.rerank_batch_size,
+            )
+
+    # --- Step 5: Output ---
     today = date.today().isoformat()
 
     if args.dry_run:
         if reading_results:
             print("\n## Reading\n")
             for r in reading_results:
-                print(f"- [{r.entry.title}]({r.entry.url})")
+                score_str = f"  [score: {r.score:.1f}]" if r.score is not None else ""
+                print(f"- [{r.entry.title}]({r.entry.url}){score_str}")
                 print(f"  > {r.reason}")
         if arxiv_results:
             print("\n## Arxiv monitoring\n")
             for r in arxiv_results:
-                print(f"- [{r.entry.title}]({r.entry.url})")
+                score_str = f"  [score: {r.score:.1f}]" if r.score is not None else ""
+                print(f"- [{r.entry.title}]({r.entry.url}){score_str}")
                 print(f"  > {r.reason}")
     else:
         write_note(args.vault, reading_results, arxiv_results, date=today)

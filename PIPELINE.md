@@ -25,6 +25,9 @@ filter_entries_batch
   └─ Pass 2 (title + summary, batch 10) → yes / no  [? entries only]
       │  keep=True results only
       ▼
+rerank (optional)      ← LLM scores each kept entry 1–10, sorts descending
+      │  same entries, reordered by relevance score
+      ▼
 write_note             ← Obsidian markdown digest
       +
 save_seen_guids        ← persist evaluated GUIDs to seen_entries.json
@@ -120,7 +123,41 @@ entry's `is_arxiv` flag. Output order matches input order.
 
 ---
 
-## Step 4 — Output
+## Step 4 — Re-ranking (optional)
+
+**Function:** `reranker.rerank`
+**CLI flags:** `--rerank` (enable), `--rerank-batch-size N` (default: `20`)
+
+| | |
+|---|---|
+| **Input** | Kept `FilterResult` objects (reading and arxiv separately) + interest profile |
+| **Output** | Same entries sorted descending by relevance score (most relevant first) |
+
+How it works:
+
+1. Kept entries are grouped into batches of `--rerank-batch-size`.
+2. Each batch becomes one LLM call. The prompt contains the interest profile and
+   each entry's title + first 200 characters of summary.
+3. The LLM assigns a score from **1** (weakly relevant) to **10** (highly
+   relevant) per entry:
+   ```
+   1. 8
+   2. 3
+   3. 10
+   ```
+4. Scores are normalised to `[0.0, 1.0]` and stored in `FilterResult.score`.
+5. Entries with missing or unparseable scores default to `0.5`.
+6. The list is sorted descending — the most relevant item appears first in the
+   Obsidian note.
+
+Re-ranking is applied separately to reading and arxiv sections so the two lists
+remain distinct. Scores are shown inline in the note as `*(score: 0.8)*`.
+
+This step is **opt-in** (`--rerank` flag). Skip it if speed is the priority.
+
+---
+
+## Step 5 — Output
 
 **Function:** `note_writer.write_note`
 
@@ -136,21 +173,23 @@ The note is structured as two sections:
 
 ## Reading
 
-- [Title](url)
+- [Title](url) *(score: 0.9)*
   > LLM one-line reason
 
 ## Arxiv monitoring
 
-- [Title](url)
+- [Title](url) *(score: 0.7)*
   > LLM one-line reason
 ```
+
+When re-ranking is disabled (default), the `*(score: X.X)*` inline tag is omitted.
 
 In `--dry-run` mode the note is printed to stdout instead and nothing is written
 to disk.
 
 ---
 
-## Step 5 — Deduplication state
+## Step 6 — Deduplication state
 
 **Function:** `rss_fetcher.save_seen_guids`
 
