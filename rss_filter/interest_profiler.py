@@ -10,9 +10,9 @@ from tqdm import tqdm
 from rss_filter.models import NoteEntry
 
 # Default max characters of entry content per LLM batch.
-# ~2400 chars ≈ ~600 tokens of entry content, leaving ample room for the
-# prompt wrapper and the model's reply within a 4096-token context window.
-DEFAULT_MAX_CHARS_PER_BATCH = 2400
+# ~8000 chars ≈ ~2000 tokens of entry content, well within the 16384-token
+# context window (prompt wrapper ~200 tokens, reply ~500 tokens reserved).
+DEFAULT_MAX_CHARS_PER_BATCH = 8000
 
 
 def chunk_entries(entries: List[NoteEntry], max_chars: int) -> List[List[NoteEntry]]:
