@@ -53,9 +53,10 @@ On the first run this will:
 1. Parse all daily notes to build your interest profile (LLM-intensive, may take 10–30 min)
 2. Fetch all RSS feeds from the OPML file
 3. Discard entries older than 7 days and entries already seen in a previous run
-4. Send each remaining entry to the LLM for yes/no filtering
-5. Write the digest to `<vault>/Filtered feed/RSS-YYYY-MM-DD.md`
-6. Save seen entry GUIDs to `seen_entries.json` so they are skipped next time
+4. **Keyword pre-filter**: drop entries whose title/summary share no keywords with your profile
+5. **Batch LLM filtering**: send surviving entries to the LLM in groups of 10
+6. Write the digest to `<vault>/Filtered feed/RSS-YYYY-MM-DD.md`
+7. Save seen entry GUIDs to `seen_entries.json` so they are skipped next time
 
 ## All Flags
 
@@ -67,6 +68,10 @@ On the first run this will:
 | `--max-age-days N` | `7` | Only evaluate entries published within the last N days |
 | `--max-notes N` | all notes | Limit profiling to the N most recent daily notes |
 | `--rebuild-profile` | off | Ignore the cached profile and regenerate it from scratch |
+| `--no-prefilter` | off | Disable keyword pre-filter (send all entries to LLM) |
+| `--prefilter-keywords N` | `60` | Number of top keywords to extract from the profile |
+| `--prefilter-min-score N` | `1` | Min keyword matches to pass the pre-filter |
+| `--batch-size N` | `10` | Number of entries per LLM call |
 | `--dry-run` | off | Print filtered entries to stdout instead of writing a note |
 
 ## Common Workflows
@@ -144,6 +149,38 @@ python main.py \
   --max-notes 3 \
   --dry-run
 ```
+
+## Performance Tuning
+
+By default the pipeline uses two speed-up layers before reaching the LLM:
+
+### 1. Keyword pre-filter (no LLM, instant)
+
+Top keywords are extracted from your interest profile and each entry's title + summary is
+scored by keyword overlap.  Entries with zero matches are dropped immediately.
+
+- Increase `--prefilter-min-score` (e.g. `2`) to be more aggressive — fewer LLM calls,
+  but higher risk of dropping borderline entries.
+- Increase `--prefilter-keywords` (e.g. `100`) for a broader keyword set.
+- Disable entirely with `--no-prefilter` if you want the LLM to see everything.
+
+### 2. Batch LLM filtering
+
+Entries are sent to the LLM in groups (`--batch-size`, default 10) instead of one at a
+time.  10 entries per call ≈ 10× fewer LLM calls for the same work.
+
+- Increase `--batch-size` (e.g. `20`) for even fewer calls; diminishing returns above ~20
+  as the model's instruction-following on numbered lists degrades.
+- Decrease it (e.g. `5`) if you observe the model missing or mis-numbering entries.
+
+### Typical throughput
+
+| Configuration | ~1200 entries/day |
+|---|---|
+| Single-entry (original) | ~8–9 hours |
+| Pre-filter only (min-score=1) | ~30–60 min (depends on hit rate) |
+| Pre-filter + batch 10 | **~5–15 min** |
+| Pre-filter + batch 20 | ~3–8 min |
 
 ## Output Format
 

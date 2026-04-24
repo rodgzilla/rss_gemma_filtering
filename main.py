@@ -14,7 +14,8 @@ from tqdm import tqdm
 from rss_filter.interest_profiler import load_or_build_profile
 from rss_filter.note_writer import write_note
 from rss_filter.notes_parser import parse_vault
-from rss_filter.relevance_filter import filter_entry
+from rss_filter.prefilter import prefilter_entries
+from rss_filter.relevance_filter import filter_entries_batch
 from rss_filter.rss_fetcher import (
     fetch_feed,
     filter_by_age,
@@ -63,6 +64,32 @@ def main(argv: list[str] | None = None) -> None:
         "--rebuild-profile",
         action="store_true",
         help="Ignore cached interest profile and regenerate it from notes",
+    )
+    parser.add_argument(
+        "--no-prefilter",
+        action="store_true",
+        help="Disable keyword pre-filter and send all entries directly to the LLM",
+    )
+    parser.add_argument(
+        "--prefilter-keywords",
+        type=int,
+        default=60,
+        metavar="N",
+        help="Number of top keywords to extract from the profile for pre-filtering (default: 60)",
+    )
+    parser.add_argument(
+        "--prefilter-min-score",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Minimum keyword matches for an entry to pass the pre-filter (default: 1)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=10,
+        metavar="N",
+        help="Number of entries per LLM filtering call (default: 10)",
     )
     parser.add_argument(
         "--dry-run",
@@ -135,30 +162,59 @@ def main(argv: list[str] | None = None) -> None:
         print("No new entries. Nothing to do.")
         return
 
-    # --- Step 3: Filter entries ---
+    # --- Step 3: Pre-filter + LLM filter ---
     reading_results = []
     arxiv_results = []
-    new_guids = set()
+    new_guids = {e.guid for e in all_entries}
 
-    for entry in tqdm(all_entries, desc="Filtering entries", unit="entry"):
+    llm_candidates = all_entries
+    if not args.no_prefilter:
+        llm_candidates, rejected = prefilter_entries(
+            all_entries,
+            profile,
+            top_n_keywords=args.prefilter_keywords,
+            min_score=args.prefilter_min_score,
+        )
+        print(
+            f"  Pre-filter: {len(llm_candidates)} entries passed keyword check, "
+            f"{len(rejected)} dropped."
+        )
+
+    print(
+        f"  Sending {len(llm_candidates)} entries to LLM (batch size {args.batch_size})…"
+    )
+
+    batch_size = args.batch_size
+    batches = [
+        llm_candidates[i : i + batch_size]
+        for i in range(0, len(llm_candidates), batch_size)
+    ]
+
+    for batch in tqdm(batches, desc="Filtering batches", unit="batch"):
         try:
-            result = filter_entry(
-                entry, profile, client, model=model, temperature=temperature
+            results = filter_entries_batch(
+                batch,
+                profile,
+                client,
+                model=model,
+                temperature=temperature,
+                batch_size=batch_size,
             )
         except Exception as e:
-            tqdm.write(f"  [WARN] Failed to filter '{entry.title[:60]}': {e}")
-            result = None
+            tqdm.write(f"  [WARN] Batch failed, skipping {len(batch)} entries: {e}")
+            continue
 
-        new_guids.add(entry.guid)
-
-        if result and result.keep:
-            if entry.is_arxiv:
-                arxiv_results.append(result)
-            else:
-                reading_results.append(result)
+        for result in results:
+            if result.keep:
+                if result.entry.is_arxiv:
+                    arxiv_results.append(result)
+                else:
+                    reading_results.append(result)
 
     kept = len(reading_results) + len(arxiv_results)
-    print(f"  Kept {kept} / {len(all_entries)} entries.")
+    print(
+        f"  Kept {kept} / {len(all_entries)} entries ({len(llm_candidates)} evaluated by LLM)."
+    )
 
     # --- Step 4: Output ---
     today = date.today().isoformat()
