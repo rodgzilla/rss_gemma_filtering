@@ -74,6 +74,8 @@ On the first run this will:
 | `--batch-size N` | `20` | Entries per pass-1 (title-only) LLM call |
 | `--pass2-batch-size N` | `10` | Entries per pass-2 (title+summary) LLM call |
 | `--summary-chars N` | `300` | Characters of summary shown to the LLM in pass 2 |
+| `--rerank` | off | Score and sort kept entries by relevance (1–10) using an extra LLM call |
+| `--rerank-batch-size N` | `20` | Entries per re-ranking LLM call |
 | `--dry-run` | off | Print filtered entries to stdout instead of writing a note |
 
 ## Common Workflows
@@ -184,6 +186,17 @@ Only entries marked `?` in pass 1 are re-evaluated with a short summary excerpt
 - Decrease `--pass2-batch-size` (e.g. `5`) if the model mis-numbers lines in
   pass 2.
 
+### 3. Re-ranking (optional, `--rerank`)
+
+After filtering, the LLM scores each kept entry from **1** (weakly relevant) to **10** (highly
+relevant). Entries are then sorted descending so the most relevant items appear first in the
+digest. Scores are shown inline as `*(score: 0.8)*`.
+
+- Use `--rerank-batch-size N` (default `20`) to control how many entries are scored per call.
+- Re-ranking adds one extra LLM call per batch of kept entries. For typical digests (~20–50
+  kept entries) this adds ~1–3 minutes.
+- Skip it with the default (no flag) if speed is the priority.
+
 ### Typical throughput
 
 | Configuration | ~1200 entries/day |
@@ -202,14 +215,16 @@ Filtered entries are written to `<vault>/Filtered feed/RSS-YYYY-MM-DD.md`:
 
 ## Reading
 
-- [Some Article Title](https://example.com/article)
+- [Some Article Title](https://example.com/article) *(score: 0.9)*
   > Directly relevant to your interest in X
 
 ## Arxiv monitoring
 
-- [A Paper on Topic Y](https://arxiv.org/abs/1234.56789)
+- [A Paper on Topic Y](https://arxiv.org/abs/1234.56789) *(score: 0.7)*
   > Matches your recurring interest in Y and Z
 ```
+
+The `*(score: X.X)*` tag is only shown when `--rerank` is enabled.
 
 ## Deduplication
 
