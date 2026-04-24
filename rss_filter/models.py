@@ -17,6 +17,7 @@ class RSSEntry:
     feed_name: str
     is_arxiv: bool
     guid: str  # Unique identifier for deduplication
+    published: str | None = None  # ISO date string YYYY-MM-DD, or None if unknown
 
 
 @dataclass

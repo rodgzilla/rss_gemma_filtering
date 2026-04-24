@@ -2,6 +2,7 @@
 
 import json
 import textwrap
+from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +12,7 @@ from rss_filter.models import RSSEntry
 from rss_filter.rss_fetcher import (
     classify_is_arxiv,
     fetch_feed,
+    filter_by_age,
     filter_new_entries,
     load_seen_guids,
     parse_opml,
@@ -103,12 +105,15 @@ def _make_mock_feed(entries):
     return mock_feed
 
 
-def _make_entry(title, link, summary, id_=None):
+def _make_entry(title, link, summary, id_=None, published_parsed=None):
     e = MagicMock()
     e.title = title
     e.link = link
     e.summary = summary
     e.get = lambda key, default="": id_ if key == "id" else default
+    e.published_parsed = published_parsed
+    e.updated_parsed = None
+    e.created_parsed = None
     return e
 
 
@@ -247,3 +252,84 @@ def test_save_seen_guids_merges_with_existing(tmp_path):
     data = set(json.loads(state_file.read_text()))
     assert "old-guid" in data
     assert "new-guid" in data
+
+
+# ---------------------------------------------------------------------------
+# published field in fetch_feed
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_feed_populates_published_from_published_parsed(mocker):
+    mock_entry = _make_entry(
+        "Title",
+        "https://example.com/c",
+        "Summary",
+        id_="guid-c",
+        published_parsed=(2026, 4, 20, 0, 0, 0, 0, 0, 0),
+    )
+    mocker.patch("feedparser.parse", return_value=_make_mock_feed([mock_entry]))
+
+    results = fetch_feed("https://example.com/feed", "Example")
+
+    assert results[0].published == "2026-04-20"
+
+
+def test_fetch_feed_published_is_none_when_no_date(mocker):
+    mock_entry = _make_entry("Title", "https://example.com/d", "Summary", id_="guid-d")
+    mocker.patch("feedparser.parse", return_value=_make_mock_feed([mock_entry]))
+
+    results = fetch_feed("https://example.com/feed", "Example")
+
+    assert results[0].published is None
+
+
+# ---------------------------------------------------------------------------
+# filter_by_age
+# ---------------------------------------------------------------------------
+
+
+def _make_rss_entry_with_date(guid: str, published: str | None) -> RSSEntry:
+    return RSSEntry(
+        title="T",
+        url="https://x.com",
+        summary="S",
+        feed_name="F",
+        is_arxiv=False,
+        guid=guid,
+        published=published,
+    )
+
+
+def test_filter_by_age_keeps_recent_entries():
+    ref = date(2026, 4, 24)
+    entries = [
+        _make_rss_entry_with_date("a", "2026-04-23"),  # 1 day old
+        _make_rss_entry_with_date("b", "2026-04-17"),  # 7 days old
+    ]
+    result = filter_by_age(entries, max_age_days=7, reference_date=ref)
+    assert {e.guid for e in result} == {"a", "b"}
+
+
+def test_filter_by_age_drops_old_entries():
+    ref = date(2026, 4, 24)
+    entries = [
+        _make_rss_entry_with_date("a", "2026-04-23"),  # 1 day old — keep
+        _make_rss_entry_with_date("b", "2026-04-16"),  # 8 days old — drop
+    ]
+    result = filter_by_age(entries, max_age_days=7, reference_date=ref)
+    assert [e.guid for e in result] == ["a"]
+
+
+def test_filter_by_age_keeps_entries_with_no_date():
+    ref = date(2026, 4, 24)
+    entries = [_make_rss_entry_with_date("no-date", None)]
+    result = filter_by_age(entries, max_age_days=7, reference_date=ref)
+    assert len(result) == 1
+
+
+def test_filter_by_age_uses_today_as_default_reference():
+    """Entries from today should always pass."""
+    today_str = date.today().isoformat()
+    entries = [_make_rss_entry_with_date("today", today_str)]
+    result = filter_by_age(entries, max_age_days=7)
+    assert len(result) == 1

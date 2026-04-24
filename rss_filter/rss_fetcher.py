@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 import feedparser
 import listparser
@@ -29,6 +30,18 @@ def classify_is_arxiv(feed_url: str, entry_url: str) -> bool:
     return "arxiv.org" in feed_url or "arxiv.org" in entry_url
 
 
+def _parse_published(item) -> Optional[str]:
+    """Extract a YYYY-MM-DD string from a feedparser entry, or return None."""
+    for attr in ("published_parsed", "updated_parsed", "created_parsed"):
+        t = getattr(item, attr, None)
+        if t is not None:
+            try:
+                return date(*t[:3]).isoformat()
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
 def fetch_feed(feed_url: str, feed_name: str) -> List[RSSEntry]:
     """Fetch a single RSS/Atom feed and return its entries as RSSEntry objects."""
     parsed = feedparser.parse(feed_url)
@@ -39,6 +52,7 @@ def fetch_feed(feed_url: str, feed_name: str) -> List[RSSEntry]:
         title = getattr(item, "title", "") or ""
         summary = getattr(item, "summary", "") or ""
         is_arxiv = classify_is_arxiv(feed_url, link)
+        published = _parse_published(item)
         entries.append(
             RSSEntry(
                 title=title,
@@ -47,6 +61,7 @@ def fetch_feed(feed_url: str, feed_name: str) -> List[RSSEntry]:
                 feed_name=feed_name,
                 is_arxiv=is_arxiv,
                 guid=guid,
+                published=published,
             )
         )
     return entries
@@ -55,6 +70,28 @@ def fetch_feed(feed_url: str, feed_name: str) -> List[RSSEntry]:
 def filter_new_entries(entries: List[RSSEntry], seen: Set[str]) -> List[RSSEntry]:
     """Return only entries whose GUID is not in the seen set."""
     return [e for e in entries if e.guid not in seen]
+
+
+def filter_by_age(
+    entries: List[RSSEntry], max_age_days: int, reference_date: Optional[date] = None
+) -> List[RSSEntry]:
+    """Return entries published within max_age_days of reference_date.
+
+    Entries with no published date are kept (we cannot determine age).
+    """
+    ref = reference_date or date.today()
+    result = []
+    for e in entries:
+        if e.published is None:
+            result.append(e)
+        else:
+            try:
+                pub = date.fromisoformat(e.published)
+                if (ref - pub).days <= max_age_days:
+                    result.append(e)
+            except ValueError:
+                result.append(e)
+    return result
 
 
 def load_seen_guids(state_path: Path) -> Set[str]:

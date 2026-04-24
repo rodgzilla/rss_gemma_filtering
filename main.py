@@ -17,6 +17,7 @@ from rss_filter.notes_parser import parse_vault
 from rss_filter.relevance_filter import filter_entry
 from rss_filter.rss_fetcher import (
     fetch_feed,
+    filter_by_age,
     filter_new_entries,
     load_seen_guids,
     parse_opml,
@@ -52,6 +53,13 @@ def main(argv: list[str] | None = None) -> None:
         help="Limit the number of daily notes parsed (useful for quick test runs)",
     )
     parser.add_argument(
+        "--max-age-days",
+        type=int,
+        default=7,
+        help="Only evaluate entries published within this many days (default: 7). "
+        "Entries with no publication date are always kept.",
+    )
+    parser.add_argument(
         "--rebuild-profile",
         action="store_true",
         help="Ignore cached interest profile and regenerate it from notes",
@@ -79,9 +87,7 @@ def main(argv: list[str] | None = None) -> None:
     # --- Step 1: Build interest profile ---
     vault_daily = args.vault / vault_cfg["daily_notes_folder"]
     print(f"Reading notes from: {vault_daily}")
-    entries = parse_vault(vault_daily)
-    if args.max_notes is not None:
-        entries = entries[: args.max_notes * 10]  # rough cap by entries, not files
+    entries = parse_vault(vault_daily, max_notes=args.max_notes)
     print(f"  Found {len(entries)} saved entries across all daily notes.")
 
     if not args.rebuild_profile and profile_path.exists():
@@ -115,6 +121,15 @@ def main(argv: list[str] | None = None) -> None:
             tqdm.write(f"  [WARN] Failed to fetch '{feed_title}': {e}")
 
     print(f"  {len(all_entries)} new entries to evaluate.")
+
+    # Drop entries older than --max-age-days
+    before = len(all_entries)
+    all_entries = filter_by_age(all_entries, max_age_days=args.max_age_days)
+    dropped = before - len(all_entries)
+    if dropped:
+        print(
+            f"  Dropped {dropped} entries older than {args.max_age_days} days → {len(all_entries)} remaining."
+        )
 
     if not all_entries:
         print("No new entries. Nothing to do.")
