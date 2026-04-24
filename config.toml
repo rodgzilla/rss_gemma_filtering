@@ -1,0 +1,12 @@
+[lmstudio]
+base_url = "http://localhost:1234/v1"
+model = "gemma-4-e4b"
+temperature = 0.1
+
+[paths]
+seen_entries = "seen_entries.json"
+interest_profile = "interest_profile.md"
+
+[vault]
+daily_notes_folder = "Daily notes"
+output_folder = "Filtered feed"
