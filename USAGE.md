@@ -71,7 +71,9 @@ On the first run this will:
 | `--no-prefilter` | off | Disable keyword pre-filter (send all entries to LLM) |
 | `--prefilter-keywords N` | `60` | Number of top keywords to extract from the profile |
 | `--prefilter-min-score N` | `1` | Min keyword matches to pass the pre-filter |
-| `--batch-size N` | `10` | Number of entries per LLM call |
+| `--batch-size N` | `20` | Entries per pass-1 (title-only) LLM call |
+| `--pass2-batch-size N` | `10` | Entries per pass-2 (title+summary) LLM call |
+| `--summary-chars N` | `300` | Characters of summary shown to the LLM in pass 2 |
 | `--dry-run` | off | Print filtered entries to stdout instead of writing a note |
 
 ## Common Workflows
@@ -164,14 +166,23 @@ scored by keyword overlap.  Entries with zero matches are dropped immediately.
 - Increase `--prefilter-keywords` (e.g. `100`) for a broader keyword set.
 - Disable entirely with `--no-prefilter` if you want the LLM to see everything.
 
-### 2. Batch LLM filtering
+### 2. Two-pass batch LLM filtering
 
-Entries are sent to the LLM in groups (`--batch-size`, default 10) instead of one at a
-time.  10 entries per call ≈ 10× fewer LLM calls for the same work.
+Entries are processed in two passes rather than one call per entry.
 
-- Increase `--batch-size` (e.g. `20`) for even fewer calls; diminishing returns above ~20
-  as the model's instruction-following on numbered lists degrades.
-- Decrease it (e.g. `5`) if you observe the model missing or mis-numbering entries.
+**Pass 1 — title-only, large batches** (`--batch-size`, default 20):
+The LLM sees only titles and replies `yes`, `no`, or `?` per entry.
+Clear yes/no entries are resolved immediately with no further cost.
+
+**Pass 2 — title + summary snippet, smaller batches** (`--pass2-batch-size`, default 10):
+Only entries marked `?` in pass 1 are re-evaluated with a short summary excerpt
+(`--summary-chars` characters, default 300). The LLM replies `yes/no` only.
+
+- Increase `--batch-size` (e.g. `30`) for even fewer pass-1 calls.
+- Increase `--summary-chars` if pass-2 decisions feel uninformed; decrease it
+  to keep prompts shorter.
+- Decrease `--pass2-batch-size` (e.g. `5`) if the model mis-numbers lines in
+  pass 2.
 
 ### Typical throughput
 

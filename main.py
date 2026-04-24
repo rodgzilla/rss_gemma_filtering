@@ -87,9 +87,23 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--batch-size",
         type=int,
+        default=20,
+        metavar="N",
+        help="Number of entries per pass-1 (title-only) LLM call (default: 20)",
+    )
+    parser.add_argument(
+        "--pass2-batch-size",
+        type=int,
         default=10,
         metavar="N",
-        help="Number of entries per LLM filtering call (default: 10)",
+        help="Number of entries per pass-2 (title+summary) LLM call (default: 10)",
+    )
+    parser.add_argument(
+        "--summary-chars",
+        type=int,
+        default=300,
+        metavar="N",
+        help="Characters of summary shown to the LLM in pass 2 (default: 300)",
     )
     parser.add_argument(
         "--dry-run",
@@ -181,35 +195,31 @@ def main(argv: list[str] | None = None) -> None:
         )
 
     print(
-        f"  Sending {len(llm_candidates)} entries to LLM (batch size {args.batch_size})…"
+        f"  Sending {len(llm_candidates)} entries to LLM "
+        f"(pass-1 batch {args.batch_size}, pass-2 batch {args.pass2_batch_size})…"
     )
 
-    batch_size = args.batch_size
-    batches = [
-        llm_candidates[i : i + batch_size]
-        for i in range(0, len(llm_candidates), batch_size)
-    ]
+    try:
+        all_results = filter_entries_batch(
+            llm_candidates,
+            profile,
+            client,
+            model=model,
+            temperature=temperature,
+            batch_size=args.batch_size,
+            pass2_batch_size=args.pass2_batch_size,
+            summary_chars=args.summary_chars,
+        )
+    except Exception as e:
+        tqdm.write(f"  [ERROR] Filtering failed: {e}")
+        all_results = []
 
-    for batch in tqdm(batches, desc="Filtering batches", unit="batch"):
-        try:
-            results = filter_entries_batch(
-                batch,
-                profile,
-                client,
-                model=model,
-                temperature=temperature,
-                batch_size=batch_size,
-            )
-        except Exception as e:
-            tqdm.write(f"  [WARN] Batch failed, skipping {len(batch)} entries: {e}")
-            continue
-
-        for result in results:
-            if result.keep:
-                if result.entry.is_arxiv:
-                    arxiv_results.append(result)
-                else:
-                    reading_results.append(result)
+    for result in all_results:
+        if result.keep:
+            if result.entry.is_arxiv:
+                arxiv_results.append(result)
+            else:
+                reading_results.append(result)
 
     kept = len(reading_results) + len(arxiv_results)
     print(

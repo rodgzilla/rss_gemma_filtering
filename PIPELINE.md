@@ -20,7 +20,9 @@ filter_by_age          ← drop entries older than N days (default: 7)
 prefilter_entries      ← keyword overlap vs. interest profile (no LLM)
       │  entries with at least 1 keyword match
       ▼
-filter_entries_batch   ← LLM yes/no, 10 entries per call
+filter_entries_batch
+  ├─ Pass 1 (titles only, batch 20) → yes / no / ?
+  └─ Pass 2 (title + summary, batch 10) → yes / no  [? entries only]
       │  keep=True results only
       ▼
 write_note             ← Obsidian markdown digest
@@ -75,35 +77,46 @@ see every entry.
 
 ---
 
-## Step 3 — Batch LLM filtering
+## Step 3 — Two-pass batch LLM filtering
 
 **Function:** `relevance_filter.filter_entries_batch`
-**CLI flag:** `--batch-size N` (default: `10`)
+**CLI flags:** `--batch-size N` (default: `20`), `--pass2-batch-size N` (default: `10`), `--summary-chars N` (default: `300`)
 
 | | |
 |---|---|
 | **Input** | Entries that passed the keyword pre-filter + interest profile text |
 | **Output** | A `FilterResult` per entry: `keep=True/False` + a one-line reason string |
 
-How it works:
+Filtering is split into two passes to keep prompts short while still giving the
+model enough signal for borderline entries.
 
-1. Entries are grouped into batches of `--batch-size`.
-2. Each batch becomes a single LLM call. The prompt contains:
-   - The full interest profile (once per batch, not once per entry)
-   - Up to N numbered entries, each with title + first 300 characters of summary
-3. The LLM is instructed to reply with exactly one numbered line per entry:
-   ```
-   1. yes: matches your interest in transformers
-   2. no: sports news unrelated to tracked topics
-   3. yes: relevant to your LLM tooling interest
-   ```
-4. The response is parsed line by line. Any missing or malformed line defaults
-   to `keep=False`.
-5. Results are split into `reading_results` and `arxiv_results` based on each
-   entry's `is_arxiv` flag.
+### Pass 1 — title-only (large batches)
 
-Sending N entries per call instead of one reduces LLM calls by a factor of N,
-while keeping the interest profile token cost amortised across the batch.
+1. Entries are grouped into batches of `--batch-size` (default 20).
+2. Each batch becomes one LLM call. The prompt contains:
+   - The full interest profile (once per batch)
+   - Up to N numbered entry **titles only** — no summaries
+3. The LLM must reply with exactly one of three verdicts per line:
+   ```
+   1. yes   — clearly relevant
+   2. no    — clearly irrelevant
+   3. ?     — title alone is ambiguous
+   ```
+4. `yes` entries are accepted immediately.
+   `no` entries are rejected immediately.
+   `?` entries (and any missing/malformed lines) proceed to pass 2.
+
+### Pass 2 — title + summary snippet (smaller batches)
+
+1. Only entries marked `?` in pass 1 are re-evaluated.
+2. Batches of `--pass2-batch-size` (default 10) entries per call.
+3. Each entry now includes its title plus the first `--summary-chars` characters
+   of its summary.
+4. The LLM replies `yes: reason` or `no: reason` only — no `?` allowed.
+5. Missing or malformed lines default to `keep=False`.
+
+Results are split into `reading_results` and `arxiv_results` based on each
+entry's `is_arxiv` flag. Output order matches input order.
 
 ---
 
