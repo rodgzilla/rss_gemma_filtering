@@ -7,7 +7,9 @@ import pytest
 
 from rss_filter.models import NoteEntry
 from rss_filter.interest_profiler import (
+    build_merge_prompt,
     build_profile_prompt,
+    chunk_entries,
     load_or_build_profile,
     save_profile,
 )
@@ -162,4 +164,116 @@ def test_load_or_build_profile_rebuilds_when_rebuild_true(tmp_path, mocker):
     )
 
     assert result == "Fresh profile."
+    mock_client.chat.completions.create.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# chunk_entries
+# ---------------------------------------------------------------------------
+
+
+def test_chunk_entries_splits_into_correct_number_of_chunks():
+    entries = [_make_entry(f"https://x.com/{i}", f"Context {i}") for i in range(10)]
+    chunks = chunk_entries(entries, max_chars=500)
+    # All entries must appear across chunks
+    all_urls = [e.url for chunk in chunks for e in chunk]
+    assert sorted(all_urls) == sorted(e.url for e in entries)
+
+
+def test_chunk_entries_each_chunk_within_char_limit():
+    entries = [_make_entry(f"https://x.com/{i}", "x" * 100) for i in range(20)]
+    chunks = chunk_entries(entries, max_chars=500)
+    for chunk in chunks:
+        total = sum(len(e.url) + len(e.context) for e in chunk)
+        assert total <= 500 or len(chunk) == 1  # single oversized entry allowed
+
+
+def test_chunk_entries_single_entry_always_in_a_chunk():
+    entries = [_make_entry("https://x.com/only", "Only entry.")]
+    chunks = chunk_entries(entries, max_chars=10)  # smaller than entry
+    assert len(chunks) == 1
+    assert chunks[0][0].url == "https://x.com/only"
+
+
+def test_chunk_entries_empty_input_returns_empty():
+    assert chunk_entries([], max_chars=1000) == []
+
+
+# ---------------------------------------------------------------------------
+# build_merge_prompt
+# ---------------------------------------------------------------------------
+
+
+def test_build_merge_prompt_contains_all_partial_profiles():
+    partials = ["Profile part A about ML.", "Profile part B about games."]
+    prompt = build_merge_prompt(partials)
+
+    assert "Profile part A about ML." in prompt
+    assert "Profile part B about games." in prompt
+
+
+def test_build_merge_prompt_instructs_to_merge():
+    partials = ["Part A.", "Part B."]
+    prompt = build_merge_prompt(partials)
+
+    lower = prompt.lower()
+    assert any(word in lower for word in ["merge", "combine", "consolidat", "unified"])
+
+
+# ---------------------------------------------------------------------------
+# load_or_build_profile with batching
+# ---------------------------------------------------------------------------
+
+
+def test_load_or_build_profile_makes_multiple_llm_calls_for_large_input(tmp_path):
+    """When entries exceed max_chars_per_batch, multiple LLM calls are made."""
+    profile_path = tmp_path / "interest_profile.md"
+
+    # 10 entries each with 200 chars of context → total ~2000 chars
+    # Set max_chars_per_batch=400 to force ~5 batches + 1 merge call
+    large_entries = [_make_entry(f"https://x.com/{i}", "a" * 200) for i in range(10)]
+
+    call_count = 0
+
+    def fake_create(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = f"Partial profile {call_count}."
+        return mock_response
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.side_effect = fake_create
+
+    load_or_build_profile(
+        entries=large_entries,
+        profile_path=profile_path,
+        client=mock_client,
+        model="test-model",
+        rebuild=True,
+        max_chars_per_batch=400,
+    )
+
+    # Should have been called more than once (batches + merge)
+    assert mock_client.chat.completions.create.call_count > 1
+
+
+def test_load_or_build_profile_single_batch_makes_one_llm_call(tmp_path):
+    """When all entries fit in one batch, exactly one LLM call is made."""
+    profile_path = tmp_path / "interest_profile.md"
+
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "Single batch profile."
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_response
+
+    load_or_build_profile(
+        entries=SAMPLE_ENTRIES,
+        profile_path=profile_path,
+        client=mock_client,
+        model="test-model",
+        rebuild=True,
+        max_chars_per_batch=100_000,
+    )
+
     mock_client.chat.completions.create.assert_called_once()

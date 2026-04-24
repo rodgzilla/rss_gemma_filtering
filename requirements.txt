@@ -1,5 +1,6 @@
 openai
 feedparser
 listparser
+tqdm
 pytest
 pytest-mock

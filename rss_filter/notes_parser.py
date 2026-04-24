@@ -94,12 +94,22 @@ def parse_note(path: Path, date: str) -> List[NoteEntry]:
     return entries
 
 
-def parse_vault(daily_notes_path: Path) -> List[NoteEntry]:
-    """Scan a folder of YYYY-MM-DD.md files and return all NoteEntry objects."""
+def parse_vault(
+    daily_notes_path: Path, max_notes: int | None = None
+) -> List[NoteEntry]:
+    """Scan a folder of YYYY-MM-DD.md files and return all NoteEntry objects.
+
+    Args:
+        daily_notes_path: Path to the folder containing YYYY-MM-DD.md files.
+        max_notes: If set, only the most recent N note files are parsed.
+    """
     entries: List[NoteEntry] = []
-    for md_file in sorted(daily_notes_path.glob("*.md")):
-        stem = md_file.stem
-        if not _DATE_RE.match(stem):
-            continue
-        entries.extend(parse_note(md_file, date=stem))
+    md_files = sorted(
+        (f for f in daily_notes_path.glob("*.md") if _DATE_RE.match(f.stem)),
+        reverse=True,  # most recent first
+    )
+    if max_notes is not None:
+        md_files = md_files[:max_notes]
+    for md_file in md_files:
+        entries.extend(parse_note(md_file, date=md_file.stem))
     return entries

@@ -9,6 +9,7 @@ from datetime import date
 from pathlib import Path
 
 from openai import OpenAI
+from tqdm import tqdm
 
 from rss_filter.interest_profiler import load_or_build_profile
 from rss_filter.note_writer import write_note
@@ -45,6 +46,12 @@ def main(argv: list[str] | None = None) -> None:
         help="Path to config.toml (default: config.toml next to main.py)",
     )
     parser.add_argument(
+        "--max-notes",
+        type=int,
+        default=None,
+        help="Limit the number of daily notes parsed (useful for quick test runs)",
+    )
+    parser.add_argument(
         "--rebuild-profile",
         action="store_true",
         help="Ignore cached interest profile and regenerate it from notes",
@@ -73,9 +80,15 @@ def main(argv: list[str] | None = None) -> None:
     vault_daily = args.vault / vault_cfg["daily_notes_folder"]
     print(f"Reading notes from: {vault_daily}")
     entries = parse_vault(vault_daily)
+    if args.max_notes is not None:
+        entries = entries[: args.max_notes * 10]  # rough cap by entries, not files
     print(f"  Found {len(entries)} saved entries across all daily notes.")
 
-    print("Building interest profile...")
+    if not args.rebuild_profile and profile_path.exists():
+        print(f"  Loading cached interest profile from {profile_path}.")
+    else:
+        print("  Building interest profile (this may take a while)...")
+
     profile = load_or_build_profile(
         entries=entries,
         profile_path=profile_path,
@@ -86,17 +99,20 @@ def main(argv: list[str] | None = None) -> None:
     print("  Interest profile ready.")
 
     # --- Step 2: Fetch RSS entries ---
-    print(f"Parsing OPML: {args.feeds}")
+    print(f"\nParsing OPML: {args.feeds}")
     feeds = parse_opml(args.feeds)
     print(f"  Found {len(feeds)} subscribed feeds.")
 
     seen_guids = load_seen_guids(seen_path)
     all_entries = []
-    for feed_title, feed_url in feeds:
-        print(f"  Fetching: {feed_title}")
-        fetched = fetch_feed(feed_url, feed_title)
-        new = filter_new_entries(fetched, seen_guids)
-        all_entries.extend(new)
+
+    for feed_title, feed_url in tqdm(feeds, desc="Fetching feeds", unit="feed"):
+        try:
+            fetched = fetch_feed(feed_url, feed_title)
+            new = filter_new_entries(fetched, seen_guids)
+            all_entries.extend(new)
+        except Exception as e:
+            tqdm.write(f"  [WARN] Failed to fetch '{feed_title}': {e}")
 
     print(f"  {len(all_entries)} new entries to evaluate.")
 
@@ -105,18 +121,22 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     # --- Step 3: Filter entries ---
-    print("Filtering entries with LLM...")
     reading_results = []
     arxiv_results = []
     new_guids = set()
 
-    for i, entry in enumerate(all_entries, start=1):
-        print(f"  [{i}/{len(all_entries)}] {entry.title[:70]}")
-        result = filter_entry(
-            entry, profile, client, model=model, temperature=temperature
-        )
+    for entry in tqdm(all_entries, desc="Filtering entries", unit="entry"):
+        try:
+            result = filter_entry(
+                entry, profile, client, model=model, temperature=temperature
+            )
+        except Exception as e:
+            tqdm.write(f"  [WARN] Failed to filter '{entry.title[:60]}': {e}")
+            result = None
+
         new_guids.add(entry.guid)
-        if result.keep:
+
+        if result and result.keep:
             if entry.is_arxiv:
                 arxiv_results.append(result)
             else:
@@ -143,9 +163,9 @@ def main(argv: list[str] | None = None) -> None:
         write_note(args.vault, reading_results, arxiv_results, date=today)
         if kept > 0:
             output = args.vault / vault_cfg["output_folder"] / f"RSS-{today}.md"
-            print(f"Note written to: {output}")
+            print(f"\nNote written to: {output}")
         else:
-            print("No relevant entries found. No note written.")
+            print("\nNo relevant entries found. No note written.")
 
     # --- Step 5: Persist seen GUIDs ---
     if not args.dry_run:
