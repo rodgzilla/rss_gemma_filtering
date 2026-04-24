@@ -22,29 +22,11 @@
     </outline>
     <outline text="Autre">
       <outline text="AlgoRythmes Blog de maths" type="rss" xmlUrl="https://www.blogger.com/feeds/7170062817138287405/posts/default" htmlUrl="http://algorythmes.blogspot.com/" description="Bienvenue aux &quot;amatheurs et amathrices&quot; de culture mathématique et d'enseignement."/>
-      <outline text="Becoming Minimalist" type="rss" xmlUrl="https://feeds.feedburner.com/becomingminimalistcom" htmlUrl="https://www.becomingminimalist.com" description="Own less. Live more."/>
-      <outline text="Colossal" type="rss" xmlUrl="https://feeds.feedburner.com/colossal" htmlUrl="https://www.thisiscolossal.com" description="The best of art, craft, and visual culture since 2010."/>
-      <outline text="Dark Roasted Blend" type="rss" xmlUrl="https://www.blogger.com/feeds/11787852/posts/default?alt=atom&amp;max-results=10&amp;redirect=false" htmlUrl="http://www.darkroastedblend.com/" description="DARK ROASTED BLEND - Weird &amp; Wonderful Things Daily: art, travel and fascinating technology."/>
       <outline text="Gödel's Lost Letter and P=NP" type="rss" xmlUrl="https://rjlipton.com/feed/" htmlUrl="https://rjlipton.wordpress.com" description="a personal view of the theory of computation"/>
-      <outline text="Les Numériques - Toute l'actualité, les tests et dossiers, les bons plans de la catégorie Science &amp; Espace" type="rss" xmlUrl="https://www.lesnumeriques.com/science-espace/rss.xml" htmlUrl="https://www.lesnumeriques.com/" description="Retrouvez toute l'actualité web et high tech, les tests de nos experts, nos guides d'achat et les bons plans du moment de l'univers numérique."/>
       <outline text="Qualia Research Institute" type="rss" xmlUrl="https://qri.org/rss.xml" htmlUrl="https://www.qri.org/" description="Discovering the Mathematical Structure of Consciousness"/>
       <outline text="Steph Ango" type="rss" xmlUrl="https://stephango.com/feed.xml" htmlUrl="https://stephango.com/" description=""/>
       <outline text="TED Talks Daily (SD video)" type="rss" xmlUrl="https://feeds.feedburner.com/TEDTalks_video" htmlUrl="https://www.ted.com/talks" description="TED is a nonprofit devoted to ideas worth spreading. On this video feed, you'll find TED Talks to inspire, intrigue and stir the imagination from some of the world's leading thinkers and doers, speaking from the stage at TED conferences, TEDx events and partner events around the world. This podcast is also available in high-def video and audio-only formats."/>
-      <outline text="three letter word for art" type="rss" xmlUrl="https://www.blogger.com/feeds/6725769409357909275/posts/default" htmlUrl="http://paulheaston.blogspot.com/" description="Paul Heaston's art blog"/>
       <outline text="Wired" type="rss" xmlUrl="https://www.wired.com/feed" htmlUrl="https://www.wired.com/latest" description="Channel Description"/>
-    </outline>
-    <outline text="BJJ">
-      <outline text="BJJ Heroes" type="rss" xmlUrl="https://www.bjjheroes.com/feed" htmlUrl="https://www.bjjheroes.com" description="Brazilian Jiu Jitsu Team History, Fighter Stats, Biographies and News"/>
-      <outline text="Gracie Barra" type="rss" xmlUrl="https://graciebarra.com/feed/" htmlUrl="https://graciebarra.com" description="Jiu-Jitsu for Everyone."/>
-      <outline text="Grapplearts" type="rss" xmlUrl="http://www.grapplearts.com/feed/" htmlUrl="http://www.grapplearts.com" description=""/>
-      <outline text="Grappling and BJJ tips by Liam The Part-Time Grappler Wandi" type="rss" xmlUrl="http://feeds.feedburner.com/GrapplingAndBjjTipsThePart-timeGrapplerPeopleWhoHaveALifeOutsideTheGym" htmlUrl="http://parttimegrappler.blogspot.com/" description="Liam Wandi is the Part Time Grappler. I apply Time-management &amp; Statistical principles to the art of Brazilian Jiu Jitsu."/>
-      <outline text="Jiu-Jitsu Times" type="rss" xmlUrl="https://jiujitsutimes.com/feed/" htmlUrl="https://www.jiujitsutimes.com" description="Jiu Jitsu (BJJ) News And Results"/>
-      <outline text="JJMAG" type="rss" xmlUrl="https://www.jiujitsumag.com/rss/" htmlUrl="https://jiujitsumag.com" description="Know Your Roll."/>
-      <outline text="slideyfoot.com | bjj resources" type="rss" xmlUrl="http://feeds.feedburner.com/SlideysTrainingLog" htmlUrl="http://www.slideyfoot.com/" description="This site is about Brazilian jiu jitsu (BJJ). I've trained since 2006: I'm a black belt, teaching and training at Artemis BJJ in Bristol, UK. All content ©Can Sönmez"/>
-      <outline text="The Grappler's Diary" type="rss" xmlUrl="https://thegrapplersdiary.substack.com/feed" htmlUrl="https://thegrapplersdiary.substack.com/" description="The digital guide to the Brazilian Jiu-Jitsu experience."/>
-      <outline text="The Perception &amp; Action Podcast" type="rss" xmlUrl="https://perceptionactionpodcast.libsyn.com/rss" htmlUrl="http://perceptionaction.com/" description="Exploration of how psychological research can be applied to improving performance, accelerating skill acquisition and designing new technologies in sports and other high performance domains. Hosted by Rob Gray, professor of Human Systems Engineering at Arizona State University, the podcast will review basic concepts and discuss the latest research in these areas."/>
-      <outline text="top scoring links : bjj" type="rss" xmlUrl="https://www.reddit.com/r/BJJ/top/.rss?t=day&amp;limit=5&amp;sort=new" htmlUrl="https://www.reddit.com/r/BJJ/top/?t=day&amp;limit=5&amp;sort=new" description="Brazilian Jiu-Jitsu (BJJ) is a martial art that focuses on grappling and ground fighting. /r/bjj is for discussing BJJ training, techniques, news, competition, asking questions and getting advice. Beginners are welcome. Discussion is encouraged."/>
-      <outline text="White Belt Brazilian Jiu-Jitsu" type="rss" xmlUrl="https://www.peopleshost.com/feed/" htmlUrl="https://wbbjj.com" description="BJJ/MMA Gear, Apparel, News, Reviews, Interviews, Techniques and Humor"/>
     </outline>
     <outline text="Data science">
       <outline text="Adventures in NI" type="rss" xmlUrl="https://joanna-bryson.blogspot.com/feeds/posts/default?alt=rss" htmlUrl="https://joanna-bryson.blogspot.com/" description="Blogging natural &amp; artificial intelligence–as scientific disciplines, art, policy, and politics. I am interested in EVERYTHING, so strongly advise navigating by the labels at the bottom of posts to find more of whatever brought you here. Originally a series of open letters home from my first academic sabbatical, this gets decreasingly professional as you read back.  I also microblog on X, mastodon.social, and bluesky as @j2bryson, and LinkedIn. I look forward to the day we reclaim twitter."/>
@@ -95,30 +77,10 @@
       <outline text="Uber Engineering Blog" type="rss" xmlUrl="https://eng.uber.com/feed/" htmlUrl="https://eng.uber.com" description="Software engineering and technologies that set the world in motion"/>
       <outline text="Wilson Lin" type="rss" xmlUrl="https://blog.wilsonl.in/rss.xml" htmlUrl="https://blog.wilsonl.in/" description="Blog for Wilson Lin"/>
     </outline>
-    <outline text="Food">
-      <outline text="Cookie and Kate" type="rss" xmlUrl="http://feeds.feedburner.com/CookieAndKate" htmlUrl="https://cookieandkate.com" description="Whole Foods and Vegetarian Recipe Blog"/>
-      <outline text="Minimalist Baker" type="rss" xmlUrl="http://feeds.feedburner.com/MinimalistBaker" htmlUrl="https://minimalistbaker.com" description="Simple Food, Simply Delicious"/>
-      <outline text="Oh She Glows" type="rss" xmlUrl="https://ohsheglows.com/feed/" htmlUrl="https://ohsheglows.com" description="Vegan Recipes to Glow From The Inside Out"/>
-      <outline text="Rhum Arrangé" type="rss" xmlUrl="http://www.rhum-arrange.fr/actu-rhum.xml" htmlUrl="http://www.rhum-arrange.fr" description="Suivez toute l'actualité et les recettes du site Rhum Arrangé"/>
-      <outline text="The Fermentation Podcast" type="rss" xmlUrl="http://fermentationpodcast.com/feed/" htmlUrl="http://fermentationpodcast.com" description="Creating Culture with Fermented Foods"/>
-      <outline text="The Mad Fermentationist - Homebrewing Blog" type="rss" xmlUrl="http://feeds.feedburner.com/TheMadFermentationist" htmlUrl="http://www.themadfermentationist.com/" description="A record of my successes and failures with all things fermentable (aimed at people who have at least a basic knowledge of beer brewing). While I focus on beer and sour ales especially (Lambics, Flemish Reds, Berliner Weisse, as well as my own creations), I also touch on many other fermented beverages and foods including sourdough bread, charcuterie, sake, wine, mead, not to mention cooking in general."/>
-      <outline text="Wild Fermentation" type="rss" xmlUrl="https://www.wildfermentation.com/feed/" htmlUrl="https://www.wildfermentation.com" description="Fermentation makes foods more nutritious, as well as delicious!"/>
-    </outline>
-    <outline text="Google alerts">
-      <outline text="Eryxfitness" type="rss" xmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/2442756683030303440" htmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/2442756683030303440" description=""/>
-      <outline text="Google Alert - sgevt" type="rss" xmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/1464138468852699755" htmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/1464138468852699755" description=""/>
-      <outline text="Grégory châtel" type="rss" xmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/6802415530400397531" htmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/6802415530400397531" description=""/>
-      <outline text="Hypnosis" type="rss" xmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/4369021667739636528" htmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/4369021667739636528" description=""/>
-      <outline text="Masked autoencoders" type="rss" xmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/13788941522705986211" htmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/13788941522705986211" description=""/>
-      <outline text="Self-supervised learning" type="rss" xmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/3115251245503891506" htmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/3115251245503891506" description=""/>
-      <outline text="Self supervised learning EO" type="rss" xmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/9905115691724588628" htmlUrl="https://www.google.com/alerts/feeds/13441839940086902085/9905115691724588628" description=""/>
-    </outline>
     <outline text="Google blog">
-      <outline text="Gmail Blog" type="rss" xmlUrl="http://feeds.feedburner.com/OfficialGmailBlog" htmlUrl="https://blog.google/products/gmail/" description="News, tips and tricks from Google's Gmail team and friends."/>
       <outline text="Google Open Source Blog" type="rss" xmlUrl="https://www.blogger.com/feeds/8698702854482141883/posts/default?redirect=false" htmlUrl="http://opensource.googleblog.com/" description="The latest news from Google on open source releases, major projects, events, and outreach programs for early career developers."/>
       <outline text="Google Research Blog" type="rss" xmlUrl="https://www.blogger.com/feeds/8474926331452026626/posts/default?alt=atom&amp;redirect=false" htmlUrl="http://ai.googleblog.com/" description="The latest from Google Research"/>
       <outline text="The Official Google Blog" type="rss" xmlUrl="https://feeds.feedburner.com/blogspot/MKuf" htmlUrl="https://blog.google/" description="Insights from Googlers into our products, technology, and the Google culture."/>
-      <outline text="YouTube Blog" type="rss" xmlUrl="https://www.blogger.com/feeds/8913912091036362264/posts/default?redirect=false" htmlUrl="http://youtube.googleblog.com/" description="The Official YouTube Blog."/>
     </outline>
     <outline text="Informatique">
       <outline text="404 Media" type="rss" xmlUrl="https://www.404media.co/rss/" htmlUrl="https://www.404media.co/" description="404 Media is an independent media company founded by technology journalists Jason Koebler, Emanuel Maiberg, Samantha Cole, and Joseph Cox."/>
@@ -128,8 +90,6 @@
       <outline text="Hacker News: Show HN" type="rss" xmlUrl="https://hnrss.org/show?points=100" htmlUrl="https://news.ycombinator.com/shownew" description="Hacker News RSS"/>
       <outline text="Korben" type="rss" xmlUrl="https://korben.info/feed" htmlUrl="https://korben.info" description="Découvrez les dernières actualités tech, astuces et analyses sur Korben.info"/>
       <outline text="Le Journal du Geek" type="rss" xmlUrl="https://www.journaldugeek.com/feed/" htmlUrl="https://www.journaldugeek.com" description="Journal du Geek - Source d'actualité High-tech : téléphone mobile, tablette, gadgets... tout l'univers Geek !"/>
-      <outline text="Les Numériques - Toute l'actualité, les tests et dossiers, les bons plans de la catégorie Informatique" type="rss" xmlUrl="https://www.lesnumeriques.com/informatique/rss.xml" htmlUrl="https://www.lesnumeriques.com/" description="Retrouvez toute l'actualité web et high tech, les tests de nos experts, nos guides d'achat et les bons plans du moment de l'univers numérique."/>
-      <outline text="Linux Today" type="rss" xmlUrl="https://www.linuxtoday.com/feed/" htmlUrl="https://www.linuxtoday.com/" description=""/>
       <outline text="Quanta Magazine" type="rss" xmlUrl="https://www.quantamagazine.org/feed/" htmlUrl="https://www.quantamagazine.org" description="Illuminating science"/>
       <outline text="The Ars Technicast" type="rss" xmlUrl="https://publicfeeds.net/f/7487/ars-technicast" htmlUrl="http://www.arstechnica.com" description="&lt;p&gt;The Ars Technicast is the official podcast from Ars Technica, where we bring you you the latest in the worlds of computing, technology, science, and everything else in between. Ars publishes original news and reviews, analysis of tech trends, and expert advice on the most fundamental aspects of tech and the many ways it's helping us enjoy our world.&lt;/p&gt;"/>
       <outline text="The blog at the bottom of the sea" type="rss" xmlUrl="https://blog.demofox.org/feed/" htmlUrl="https://blog.demofox.org" description="Programming, Graphics, Gamedev, Exotic Computation, Audio Synthesis"/>
@@ -138,46 +98,6 @@
       <outline text="top scoring links : ObsidianMD" type="rss" xmlUrl="https://www.reddit.com/r/ObsidianMd/top/.rss?t=day&amp;limit=3&amp;sort=new" htmlUrl="https://www.reddit.com/r/ObsidianMd/top/?t=day&amp;limit=3&amp;sort=new" description="Subreddit for the Obsidian notes app https://obsidian.md"/>
       <outline text="Wait But Why" type="rss" xmlUrl="https://waitbutwhy.com/feed" htmlUrl="https://waitbutwhy.com" description=""/>
       <outline text="Web3 is Going Just Great" type="rss" xmlUrl="https://www.web3isgoinggreat.com/feed.xml" htmlUrl="https://web3isgoinggreat.com/" description=""/>
-    </outline>
-    <outline text="Jeux">
-      <outline text="$$$ Big Money Bill $$$" type="rss" xmlUrl="https://www.blogger.com/feeds/923586183701099812/posts/default" htmlUrl="http://bigmoneybill.blogspot.com/" description="Bill's theory and practice of backgammon"/>
-      <outline text="Dernières actualités MMO et MMORPG de JeuxOnLine" type="rss" xmlUrl="https://flux.jeuxonline.info/actualites.rss" htmlUrl="https://www.jeuxonline.info/" description="Dernières actualités jeux-vidéo de JeuxOnLine"/>
-      <outline text="JeuxVideo.com - PC" type="rss" xmlUrl="https://www.jeuxvideo.com/rss/rss-pc.xml" htmlUrl="https://www.jeuxvideo.com" description="Le média de référence des gamers - Jeux Vidéo PC et Consoles - PC"/>
-      <outline text="JudgeHype Diablo III" type="rss" xmlUrl="https://diablo3.judgehype.com/nouvelles.xml" htmlUrl="https://diablo3.judgehype.com" description="Toute l'actualité Diablo III par JudgeHype"/>
-      <outline text="JudgeHype StarCraft II" type="rss" xmlUrl="https://starcraft2.judgehype.com/nouvelles.xml" htmlUrl="https://starcraft2.judgehype.com" description="Toute l'actualité StarCraft II par JudgeHype"/>
-      <outline text="NoFrag" type="rss" xmlUrl="https://feeds.feedburner.com/nofrag_com" htmlUrl="https://nofrag.com" description="L'actualité des simulateurs de meurtres"/>
-      <outline text="Steam RSS News Feed" type="rss" xmlUrl="http://store.steampowered.com/feeds/news.xml" htmlUrl="http://www.steampowered.com/" description="All Steam news, all the time!"/>
-    </outline>
-    <outline text="Le Monde">
-      <outline text="International : Toute l’actualité sur Le Monde.fr." type="rss" xmlUrl="https://www.lemonde.fr/international/rss_full.xml" htmlUrl="https://www.lemonde.fr/international/rss_full.xml" description="International  - Découvrez gratuitement tous les articles, les vidéos et les infographies de la rubrique International sur Le Monde.fr."/>
-      <outline text="Mediapart" type="rss" xmlUrl="https://www.mediapart.fr/articles/feed" htmlUrl="https://www.mediapart.fr/" description="Mediapart"/>
-      <outline text="Planète : Toute l’actualité sur Le Monde.fr." type="rss" xmlUrl="https://www.lemonde.fr/planete/rss_full.xml" htmlUrl="https://www.lemonde.fr/planete/rss_full.xml" description="Planète  - Découvrez gratuitement tous les articles, les vidéos et les infographies de la rubrique Planète sur Le Monde.fr."/>
-      <outline text="Sciences : Toute l’actualité sur Le Monde.fr." type="rss" xmlUrl="https://www.lemonde.fr/sciences/rss_full.xml" htmlUrl="https://www.lemonde.fr/sciences/rss_full.xml" description="Sciences  - Découvrez gratuitement tous les articles, les vidéos et les infographies de la rubrique Sciences sur Le Monde.fr."/>
-    </outline>
-    <outline text="MOOC">
-      <outline text="MIT Brain and Cognitive Sciences" type="rss" xmlUrl="https://ocw.mit.edu/rss/new/mit-newcourses-9.xml" htmlUrl="https://ocw.mit.edu/courses/brain-and-cognitive-sciences" description="New courses in Brain and Cognitive Sciences from MIT OpenCourseWare, provider of free and open MIT course materials."/>
-      <outline text="MIT Chemical Engineering" type="rss" xmlUrl="https://ocw.mit.edu/rss/new/mit-newcourses-10.xml" htmlUrl="https://ocw.mit.edu/courses/chemical-engineering" description="New courses in Chemical Engineering from MIT OpenCourseWare, provider of free and open MIT course materials."/>
-      <outline text="MIT Chemistry" type="rss" xmlUrl="https://ocw.mit.edu/rss/new/mit-newcourses-5.xml" htmlUrl="https://ocw.mit.edu/courses/chemistry" description="New courses in Chemistry from MIT OpenCourseWare, provider of free and open MIT course materials."/>
-      <outline text="MIT Computer Science and Electrical Engineering" type="rss" xmlUrl="https://ocw.mit.edu/rss/new/mit-newcourses-6.xml" htmlUrl="https://ocw.mit.edu/courses/electrical-engineering-and-computer-science" description="New courses in Electrical Engineering and Computer Science from MIT OpenCourseWare, provider of free and open MIT course materials."/>
-      <outline text="MIT Maths" type="rss" xmlUrl="https://ocw.mit.edu/rss/new/mit-newcourses-18.xml" htmlUrl="https://ocw.mit.edu/courses/mathematics" description="New courses in Mathematics from MIT OpenCourseWare, provider of free and open MIT course materials."/>
-      <outline text="MIT Music and Theater Arts" type="rss" xmlUrl="https://ocw.mit.edu/rss/new/mit-newcourses-21M.xml" htmlUrl="https://ocw.mit.edu/courses/music-and-theater-arts" description="New courses in Music and Theater Arts from MIT OpenCourseWare, provider of free and open MIT course materials."/>
-      <outline text="MIT Nuclear Science and Engineering" type="rss" xmlUrl="https://ocw.mit.edu/rss/new/mit-newcourses-22.xml" htmlUrl="https://ocw.mit.edu/courses/nuclear-engineering" description="New courses in Nuclear Science and Engineering from MIT OpenCourseWare, provider of free and open MIT course materials."/>
-      <outline text="MIT Physics" type="rss" xmlUrl="https://ocw.mit.edu/rss/new/mit-newcourses-8.xml" htmlUrl="https://ocw.mit.edu/courses/physics" description="New courses in Physics from MIT OpenCourseWare, provider of free and open MIT course materials."/>
-    </outline>
-    <outline text="Music">
-      <outline text="Attack Magazine" type="rss" xmlUrl="https://www.attackmagazine.com/feed/" htmlUrl="https://www.attackmagazine.com/" description="Dance Music, Production and Culture"/>
-    </outline>
-    <outline text="Webcomic">
-      <outline text="bouletcorp - le blog" type="rss" xmlUrl="https://bouletcorp.com/feed/" htmlUrl="http://www.bouletcorp.com" description="Un site utilisant WordPress"/>
-      <outline text="CommitStrip" type="rss" xmlUrl="https://www.commitstrip.com/en/feed/" htmlUrl="https://www.commitstrip.com" description="The blog relating the daily life of web agency developers"/>
-      <outline text="Extra Fabulous Comics" type="rss" xmlUrl="https://extrafabulouscomics.com/feed/" htmlUrl="https://extrafabulouscomics.com" description="okay"/>
-      <outline text="Geek&amp;Poke" type="rss" xmlUrl="http://feeds.feedburner.com/GeekAndPoke" htmlUrl="http://geek-and-poke.com/" description=""/>
-      <outline text="PHD Comics" type="rss" xmlUrl="https://phdcomics.com/gradfeed.php" htmlUrl="http://www.phdcomics.com" description="Providing global up-to-the-minute procrastination!"/>
-      <outline text="PirateSourcil" type="rss" xmlUrl="http://www.piratesourcil.com/feeds/posts/default" htmlUrl="http://www.piratesourcil.com/" description="BD piratesourcil : Humour douteux, noir, mais parfois gentil"/>
-      <outline text="Questionable Content" type="rss" xmlUrl="https://www.questionablecontent.net/QCRSS.xml" htmlUrl="http://www.questionablecontent.net" description="The Official QC RSS Feed"/>
-      <outline text="Saturday Morning Breakfast Cereal (updated daily)" type="rss" xmlUrl="https://www.smbc-comics.com/comic/rss" htmlUrl="https://www.smbc-comics.com/" description="Latest Saturday Morning Breakfast Cereal comics and news"/>
-      <outline text="xkcd.com" type="rss" xmlUrl="https://xkcd.com/rss.xml" htmlUrl="https://xkcd.com/" description="xkcd.com: A webcomic of romance and math humor."/>
-      <outline text="YODABLOG" type="rss" xmlUrl="http://www.yodablog.net/?feed=rss2" htmlUrl="http://www.yodablog.net" description="Star Wars c'est rigolo"/>
     </outline>
   </body>
 </opml>

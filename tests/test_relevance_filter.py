@@ -8,10 +8,14 @@ from rss_filter.models import FilterResult, RSSEntry
 from rss_filter.relevance_filter import (
     build_batch_filter_prompt,
     build_filter_prompt,
+    build_pass1_prompt,
+    build_pass2_prompt,
     filter_entries_batch,
     filter_entry,
     parse_batch_response,
     parse_llm_response,
+    parse_pass1_response,
+    parse_pass2_response,
 )
 
 
@@ -284,3 +288,215 @@ def test_filter_entries_batch_splits_into_batches():
 
     assert call_count == 3  # ceil(5/2) = 3 LLM calls
     assert len(results) == 5
+
+
+# ---------------------------------------------------------------------------
+# build_pass1_prompt
+# ---------------------------------------------------------------------------
+
+
+def test_build_pass1_prompt_contains_profile():
+    entries = [_make_entry("Title A", "Summary A")]
+    prompt = build_pass1_prompt(entries, INTEREST_PROFILE)
+    assert INTEREST_PROFILE in prompt
+
+
+def test_build_pass1_prompt_contains_titles():
+    entries = [_make_entry("Title A", ""), _make_entry("Title B", "")]
+    prompt = build_pass1_prompt(entries, INTEREST_PROFILE)
+    assert "Title A" in prompt
+    assert "Title B" in prompt
+
+
+def test_build_pass1_prompt_does_not_contain_summaries():
+    entries = [_make_entry("Title A", "SECRET_SUMMARY_TEXT")]
+    prompt = build_pass1_prompt(entries, INTEREST_PROFILE)
+    assert "SECRET_SUMMARY_TEXT" not in prompt
+
+
+def test_build_pass1_prompt_mentions_question_mark_option():
+    entries = [_make_entry("T", "")]
+    prompt = build_pass1_prompt(entries, INTEREST_PROFILE)
+    assert "?" in prompt
+
+
+# ---------------------------------------------------------------------------
+# parse_pass1_response
+# ---------------------------------------------------------------------------
+
+
+def test_parse_pass1_response_splits_into_three_groups():
+    entries = [_make_entry("A", ""), _make_entry("B", ""), _make_entry("C", "")]
+    response = "1. yes\n2. no\n3. ?"
+    yes, no, unsure = parse_pass1_response(response, entries)
+    assert len(yes) == 1
+    assert len(no) == 1
+    assert len(unsure) == 1
+
+
+def test_parse_pass1_response_yes_entry_correct():
+    entries = [_make_entry("A", ""), _make_entry("B", "")]
+    response = "1. yes\n2. no"
+    yes, no, unsure = parse_pass1_response(response, entries)
+    assert yes[0].title == "A"
+    assert no[0].title == "B"
+
+
+def test_parse_pass1_response_missing_line_goes_to_unsure():
+    entries = [_make_entry("A", ""), _make_entry("B", "")]
+    response = "1. yes"  # entry 2 missing
+    yes, no, unsure = parse_pass1_response(response, entries)
+    assert len(unsure) == 1
+    assert unsure[0].title == "B"
+
+
+def test_parse_pass1_response_accepts_colon_suffix():
+    entries = [_make_entry("A", "")]
+    response = "1. ?: not sure about this one"
+    yes, no, unsure = parse_pass1_response(response, entries)
+    assert len(unsure) == 1
+
+
+def test_parse_pass1_response_total_equals_input():
+    entries = [_make_entry(f"T{i}", "") for i in range(5)]
+    response = "1. yes\n2. no\n3. ?\n4. yes\n5. no"
+    yes, no, unsure = parse_pass1_response(response, entries)
+    assert len(yes) + len(no) + len(unsure) == 5
+
+
+# ---------------------------------------------------------------------------
+# build_pass2_prompt
+# ---------------------------------------------------------------------------
+
+
+def test_build_pass2_prompt_contains_profile():
+    entries = [_make_entry("T", "Summary text")]
+    prompt = build_pass2_prompt(entries, INTEREST_PROFILE, summary_chars=100)
+    assert INTEREST_PROFILE in prompt
+
+
+def test_build_pass2_prompt_contains_title_and_summary():
+    entries = [_make_entry("My Title", "My summary content")]
+    prompt = build_pass2_prompt(entries, INTEREST_PROFILE, summary_chars=100)
+    assert "My Title" in prompt
+    assert "My summary content" in prompt
+
+
+def test_build_pass2_prompt_truncates_summary():
+    long_summary = "x" * 500
+    entries = [_make_entry("T", long_summary)]
+    prompt = build_pass2_prompt(entries, INTEREST_PROFILE, summary_chars=50)
+    assert "x" * 50 in prompt
+    assert "x" * 51 not in prompt
+
+
+# ---------------------------------------------------------------------------
+# parse_pass2_response
+# ---------------------------------------------------------------------------
+
+
+def test_parse_pass2_response_returns_filter_results():
+    entries = [_make_entry("A", ""), _make_entry("B", "")]
+    response = "1. yes: matches interest\n2. no: off-topic"
+    results = parse_pass2_response(response, entries)
+    assert len(results) == 2
+    assert results[0].keep is True
+    assert results[1].keep is False
+
+
+def test_parse_pass2_response_attaches_entries():
+    entry = _make_entry("A", "")
+    results = parse_pass2_response("1. yes: reason", [entry])
+    assert results[0].entry is entry
+
+
+def test_parse_pass2_response_missing_line_defaults_false():
+    entries = [_make_entry("A", ""), _make_entry("B", "")]
+    response = "1. yes: reason"
+    results = parse_pass2_response(response, entries)
+    assert results[1].keep is False
+    assert "parse error" in results[1].reason
+
+
+# ---------------------------------------------------------------------------
+# filter_entries_batch — two-pass integration
+# ---------------------------------------------------------------------------
+
+
+def test_filter_entries_batch_two_pass_yes_no_skips_pass2():
+    """Entries clearly yes/no in pass 1 should not trigger a pass-2 call."""
+    entries = [_make_entry("A", ""), _make_entry("B", "")]
+    pass1_response = "1. yes\n2. no"
+
+    client = MagicMock()
+    client.chat.completions.create.return_value.choices[
+        0
+    ].message.content = pass1_response
+
+    results = filter_entries_batch(
+        entries, INTEREST_PROFILE, client, model="m", batch_size=20
+    )
+
+    assert client.chat.completions.create.call_count == 1  # only pass 1
+    assert results[0].keep is True
+    assert results[1].keep is False
+
+
+def test_filter_entries_batch_two_pass_unsure_triggers_pass2():
+    """Entries marked '?' in pass 1 must go through pass 2."""
+    entries = [_make_entry("A", "summary A"), _make_entry("B", "summary B")]
+    responses = ["1. ?\n2. ?", "1. yes: relevant\n2. no: off-topic"]
+    call_idx = 0
+
+    def fake_create(**kwargs):
+        nonlocal call_idx
+        r = MagicMock()
+        r.choices[0].message.content = responses[call_idx]
+        call_idx += 1
+        return r
+
+    client = MagicMock()
+    client.chat.completions.create.side_effect = fake_create
+
+    results = filter_entries_batch(
+        entries, INTEREST_PROFILE, client, model="m", batch_size=20, pass2_batch_size=10
+    )
+
+    assert call_idx == 2  # pass 1 + pass 2
+    assert results[0].keep is True
+    assert results[1].keep is False
+
+
+def test_filter_entries_batch_two_pass_preserves_order():
+    """Results must be returned in the same order as input entries."""
+    entries = [_make_entry(f"T{i}", f"S{i}", guid=f"g{i}") for i in range(4)]
+    # Two yes, one unsure, one no in pass 1
+    responses = [
+        "1. yes\n2. ?\n3. no\n4. yes",
+        "1. no: not relevant",  # pass 2 for entry index 1
+    ]
+    call_idx = 0
+
+    def fake_create(**kwargs):
+        nonlocal call_idx
+        r = MagicMock()
+        r.choices[0].message.content = responses[call_idx]
+        call_idx += 1
+        return r
+
+    client = MagicMock()
+    client.chat.completions.create.side_effect = fake_create
+
+    results = filter_entries_batch(
+        entries, INTEREST_PROFILE, client, model="m", batch_size=20
+    )
+
+    assert len(results) == 4
+    assert results[0].entry.guid == "g0"
+    assert results[1].entry.guid == "g1"
+    assert results[2].entry.guid == "g2"
+    assert results[3].entry.guid == "g3"
+    assert results[0].keep is True  # yes in pass 1
+    assert results[1].keep is False  # ? in pass 1, no in pass 2
+    assert results[2].keep is False  # no in pass 1
+    assert results[3].keep is True  # yes in pass 1
