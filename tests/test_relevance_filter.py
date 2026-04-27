@@ -342,12 +342,13 @@ def test_parse_pass1_response_yes_entry_correct():
     assert no[0].title == "B"
 
 
-def test_parse_pass1_response_missing_line_goes_to_unsure():
+def test_parse_pass1_response_missing_line_goes_to_no():
     entries = [_make_entry("A", ""), _make_entry("B", "")]
-    response = "1. yes"  # entry 2 missing
+    response = "1. yes"  # entry 2 missing — should default to no, not unsure
     yes, no, unsure = parse_pass1_response(response, entries)
-    assert len(unsure) == 1
-    assert unsure[0].title == "B"
+    assert len(unsure) == 0
+    assert len(no) == 1
+    assert no[0].title == "B"
 
 
 def test_parse_pass1_response_accepts_colon_suffix():

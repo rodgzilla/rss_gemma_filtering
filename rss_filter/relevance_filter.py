@@ -118,6 +118,9 @@ def build_pass1_prompt(entries: List[RSSEntry], interest_profile: str) -> str:
         f"  <n>. yes   — clearly relevant to the user's interests\n"
         f"  <n>. no    — clearly outside the user's interests\n"
         f"  <n>. ?     — title alone is ambiguous, more context needed\n\n"
+        f"Be selective and conservative. Only mark an entry 'yes' if it is clearly "
+        f"and directly relevant to a specific stated interest in the profile. "
+        f"When in doubt, mark it 'no'.\n\n"
         f"Output ONLY the {n} numbered lines, nothing else.\n\n"
         f"--- Interest profile ---\n"
         f"{interest_profile}\n\n"
@@ -144,7 +147,7 @@ def parse_pass1_response(
 
     yes_entries, no_entries, unsure_entries = [], [], []
     for i, entry in enumerate(entries, 1):
-        verdict = verdicts.get(i, "?")
+        verdict = verdicts.get(i, "no")
         if verdict == "yes":
             yes_entries.append(entry)
         elif verdict == "no":
@@ -176,6 +179,9 @@ def build_pass2_prompt(
         f"  <n>. yes: <one-line reason>\n"
         f"or\n"
         f"  <n>. no: <one-line reason>\n\n"
+        f"Be selective and conservative. Only mark an entry 'yes' if it is clearly "
+        f"and directly relevant to a specific stated interest in the profile. "
+        f"When in doubt, mark it 'no'.\n\n"
         f"Output ONLY the {n} numbered lines, nothing else.\n\n"
         f"--- Interest profile ---\n"
         f"{interest_profile}\n\n"
