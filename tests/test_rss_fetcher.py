@@ -11,6 +11,7 @@ import pytest
 from rss_filter.models import RSSEntry
 from rss_filter.rss_fetcher import (
     classify_is_arxiv,
+    deduplicate_entries,
     fetch_feed,
     filter_by_age,
     filter_new_entries,
@@ -333,3 +334,109 @@ def test_filter_by_age_uses_today_as_default_reference():
     entries = [_make_rss_entry_with_date("today", today_str)]
     result = filter_by_age(entries, max_age_days=7)
     assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# deduplicate_entries
+# ---------------------------------------------------------------------------
+
+
+def _make_arxiv_entry(guid: str, url: str, feed_name: str = "cs.AI") -> RSSEntry:
+    return RSSEntry(
+        title="A Paper",
+        url=url,
+        summary="Abstract.",
+        feed_name=feed_name,
+        is_arxiv=True,
+        guid=guid,
+    )
+
+
+def _make_general_entry(guid: str, url: str, feed_name: str = "Blog") -> RSSEntry:
+    return RSSEntry(
+        title="An Article",
+        url=url,
+        summary="Text.",
+        feed_name=feed_name,
+        is_arxiv=False,
+        guid=guid,
+    )
+
+
+def test_deduplicate_entries_keeps_single_arxiv_entry():
+    entries = [_make_arxiv_entry("id1", "https://arxiv.org/abs/2404.12345")]
+    result = deduplicate_entries(entries)
+    assert len(result) == 1
+
+
+def test_deduplicate_entries_removes_arxiv_cross_post_duplicate():
+    """Same paper posted in cs.AI and cs.LG should appear only once."""
+    entries = [
+        _make_arxiv_entry("guid-ai", "https://arxiv.org/abs/2404.12345", "cs.AI"),
+        _make_arxiv_entry("guid-lg", "https://arxiv.org/abs/2404.12345", "cs.LG"),
+    ]
+    result = deduplicate_entries(entries)
+    assert len(result) == 1
+
+
+def test_deduplicate_entries_first_occurrence_wins_for_arxiv():
+    entries = [
+        _make_arxiv_entry("guid-ai", "https://arxiv.org/abs/2404.12345", "cs.AI"),
+        _make_arxiv_entry("guid-lg", "https://arxiv.org/abs/2404.12345", "cs.LG"),
+    ]
+    result = deduplicate_entries(entries)
+    assert result[0].feed_name == "cs.AI"
+
+
+def test_deduplicate_entries_handles_old_style_arxiv_urls():
+    """Old-style arxiv URLs like arxiv.org/abs/cs/0501001 should dedup correctly."""
+    entries = [
+        _make_arxiv_entry("guid-1", "https://arxiv.org/abs/cs/0501001", "cs.AI"),
+        _make_arxiv_entry("guid-2", "https://arxiv.org/abs/cs/0501001", "cs.LG"),
+    ]
+    result = deduplicate_entries(entries)
+    assert len(result) == 1
+
+
+def test_deduplicate_entries_keeps_distinct_arxiv_papers():
+    entries = [
+        _make_arxiv_entry("guid-1", "https://arxiv.org/abs/2404.00001"),
+        _make_arxiv_entry("guid-2", "https://arxiv.org/abs/2404.00002"),
+    ]
+    result = deduplicate_entries(entries)
+    assert len(result) == 2
+
+
+def test_deduplicate_entries_deduplicates_general_entries_by_url():
+    entries = [
+        _make_general_entry("guid-1", "https://blog.example.com/post-1", "Blog A"),
+        _make_general_entry("guid-2", "https://blog.example.com/post-1", "Blog B"),
+    ]
+    result = deduplicate_entries(entries)
+    assert len(result) == 1
+
+
+def test_deduplicate_entries_keeps_distinct_general_entries():
+    entries = [
+        _make_general_entry("guid-1", "https://blog.example.com/post-1"),
+        _make_general_entry("guid-2", "https://blog.example.com/post-2"),
+    ]
+    result = deduplicate_entries(entries)
+    assert len(result) == 2
+
+
+def test_deduplicate_entries_returns_empty_for_empty_input():
+    assert deduplicate_entries([]) == []
+
+
+def test_deduplicate_entries_preserves_order_of_first_occurrences():
+    entries = [
+        _make_general_entry("guid-1", "https://example.com/a"),
+        _make_arxiv_entry("guid-2", "https://arxiv.org/abs/2404.00001"),
+        _make_general_entry("guid-3", "https://example.com/a"),  # dup
+        _make_arxiv_entry("guid-4", "https://arxiv.org/abs/2404.00001"),  # dup
+        _make_general_entry("guid-5", "https://example.com/b"),
+    ]
+    result = deduplicate_entries(entries)
+    assert len(result) == 3
+    assert [e.guid for e in result] == ["guid-1", "guid-2", "guid-5"]

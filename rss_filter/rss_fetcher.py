@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
@@ -65,6 +66,34 @@ def fetch_feed(feed_url: str, feed_name: str) -> List[RSSEntry]:
             )
         )
     return entries
+
+
+_ARXIV_ID_RE = re.compile(r"arxiv\.org/abs/(.+?)(?:v\d+)?$")
+
+
+def _arxiv_canonical_id(url: str) -> Optional[str]:
+    """Extract the canonical arXiv paper ID from a URL, or return None."""
+    m = _ARXIV_ID_RE.search(url)
+    return m.group(1).rstrip("/") if m else None
+
+
+def deduplicate_entries(entries: List[RSSEntry]) -> List[RSSEntry]:
+    """Remove duplicate entries, keeping the first occurrence.
+
+    arXiv entries are deduplicated by canonical paper ID extracted from the URL.
+    Non-arXiv entries are deduplicated by URL.
+    """
+    seen_keys: Set[str] = set()
+    result: List[RSSEntry] = []
+    for entry in entries:
+        if entry.is_arxiv:
+            key = _arxiv_canonical_id(entry.url) or entry.url
+        else:
+            key = entry.url
+        if key not in seen_keys:
+            seen_keys.add(key)
+            result.append(entry)
+    return result
 
 
 def filter_new_entries(entries: List[RSSEntry], seen: Set[str]) -> List[RSSEntry]:

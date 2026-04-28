@@ -21,7 +21,8 @@ def _render_exemplars(exemplars: list[dict]) -> list[str]:
         return []
     lines = []
     for ex in exemplars:
-        lines.append(f"  - `{ex['score']:.4f}` {ex['text']}")
+        label = ex.get("title") or ex["text"]
+        lines.append(f"  - `{ex['score']:.4f}` {label}")
     return lines
 
 

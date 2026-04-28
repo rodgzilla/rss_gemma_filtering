@@ -102,7 +102,12 @@ def score_entries(
                 "embedding": emb,
                 "embedding_128": emb[:MATRYOSHKA_DIM],
                 "exemplars": [
-                    {"text": ex["text"], "score": ex["score"]} for ex in exemplars
+                    {
+                        "text": ex["text"],
+                        "score": ex["score"],
+                        "title": ex.get("title", ""),
+                    }
+                    for ex in exemplars
                 ],
                 "agg_score": agg,
                 "is_arxiv": entry.is_arxiv,

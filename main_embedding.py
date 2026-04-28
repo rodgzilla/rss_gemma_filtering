@@ -17,6 +17,7 @@ from rss_filter.note_writer import write_note
 from rss_filter.notes_parser import parse_vault
 from rss_filter.reranker import rerank
 from rss_filter.rss_fetcher import (
+    deduplicate_entries,
     fetch_feed,
     filter_by_age,
     filter_new_entries,
@@ -221,6 +222,13 @@ def main(argv: list[str] | None = None) -> None:
             tqdm.write(f"  [WARN] Failed to fetch '{feed_title}': {e}")
 
     print(f"  {len(all_entries)} new entries to evaluate.")
+
+    # Deduplicate cross-posted entries (e.g. same arXiv paper in cs.AI and cs.LG)
+    before_dedup = len(all_entries)
+    all_entries = deduplicate_entries(all_entries)
+    removed = before_dedup - len(all_entries)
+    if removed:
+        print(f"  Removed {removed} duplicate(s); {len(all_entries)} entries remain.")
 
     # Drop entries older than --max-age-days
     before = len(all_entries)

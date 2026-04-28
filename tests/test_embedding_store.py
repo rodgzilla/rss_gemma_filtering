@@ -165,7 +165,7 @@ class TestQuery:
         store.build_or_update([_note("http://a.com", "context text")], client)
 
         results = store.query(_unit([1.0, 0.0]), top_k=1)
-        assert set(results[0].keys()) == {"text", "url", "score"}
+        assert set(results[0].keys()) == {"text", "url", "score", "title"}
 
 
 # ---------------------------------------------------------------------------

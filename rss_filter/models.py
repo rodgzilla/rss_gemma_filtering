@@ -10,6 +10,7 @@ class NoteEntry:
     context: str  # Title + surrounding text from the note
     source: str  # "reading" | "arxiv"
     date: str  # YYYY-MM-DD
+    title: str = ""  # Display title extracted from the note link
 
 
 @dataclass

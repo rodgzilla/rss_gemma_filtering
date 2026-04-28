@@ -40,6 +40,7 @@ def parse_note(path: Path, date: str) -> List[NoteEntry]:
     entries: List[NoteEntry] = []
     current_source: str | None = None
     current_url: str | None = None
+    current_title: str = ""
     current_context_lines: list[str] = []
 
     def _flush():
@@ -50,6 +51,7 @@ def parse_note(path: Path, date: str) -> List[NoteEntry]:
                     context=" ".join(current_context_lines).strip(),
                     source=current_source,
                     date=date,
+                    title=current_title,
                 )
             )
 
@@ -59,12 +61,14 @@ def parse_note(path: Path, date: str) -> List[NoteEntry]:
             _flush()
             current_source = "reading"
             current_url = None
+            current_title = ""
             current_context_lines = []
             continue
         if _ARXIV_RE.match(line):
             _flush()
             current_source = "arxiv"
             current_url = None
+            current_title = ""
             current_context_lines = []
             continue
         # Any other h2 heading ends current section
@@ -72,6 +76,7 @@ def parse_note(path: Path, date: str) -> List[NoteEntry]:
             _flush()
             current_source = None
             current_url = None
+            current_title = ""
             current_context_lines = []
             continue
 
@@ -85,6 +90,7 @@ def parse_note(path: Path, date: str) -> List[NoteEntry]:
             title = link_match.group(1)
             url = link_match.group(2)
             current_url = url
+            current_title = title
             current_context_lines = [title]
         elif current_url is not None and line.strip():
             # Indented context line — strip leading whitespace / tab

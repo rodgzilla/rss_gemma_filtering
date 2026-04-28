@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS documents (
     source_note TEXT NOT NULL,
     date        TEXT,
     embedding   BLOB NOT NULL,
+    title       TEXT NOT NULL DEFAULT '',
     UNIQUE(url, source_note)
 );
 """
@@ -26,13 +27,13 @@ CREATE TABLE IF NOT EXISTS documents (
 _DROP_TABLE = "DROP TABLE IF EXISTS documents;"
 
 _INSERT_DOC = """
-INSERT OR IGNORE INTO documents (url, text, source_note, date, embedding)
-VALUES (?, ?, ?, ?, ?);
+INSERT OR IGNORE INTO documents (url, text, source_note, date, embedding, title)
+VALUES (?, ?, ?, ?, ?, ?);
 """
 
 _SELECT_EXISTING_KEYS = "SELECT url, source_note FROM documents;"
 
-_SELECT_ALL = "SELECT text, url, embedding FROM documents;"
+_SELECT_ALL = "SELECT text, url, embedding, title FROM documents;"
 _SELECT_ALL_WITH_META = "SELECT url, text, source_note, date, embedding FROM documents;"
 
 _COUNT = "SELECT COUNT(*) FROM documents;"
@@ -55,6 +56,12 @@ class EmbeddingStore:
         self._db_path = db_path
         self._conn = sqlite3.connect(db_path)
         self._conn.execute(_CREATE_TABLE)
+        # Migration: add title column if it doesn't exist (existing databases)
+        cols = {row[1] for row in self._conn.execute("PRAGMA table_info(documents);")}
+        if "title" not in cols:
+            self._conn.execute(
+                "ALTER TABLE documents ADD COLUMN title TEXT NOT NULL DEFAULT '';"
+            )
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -100,6 +107,7 @@ class EmbeddingStore:
                 entry.source,
                 str(entry.date) if entry.date else None,
                 emb.tobytes(),
+                entry.title,
             )
             for entry, text, emb in zip(new_entries, texts, embeddings)
         ]
@@ -130,6 +138,7 @@ class EmbeddingStore:
         matrix = np.stack(
             [np.frombuffer(row[2], dtype=np.float32) for row in rows], axis=0
         )  # shape (N, D)
+        titles = [row[3] for row in rows]
 
         # Normalise stored embeddings and query vector.
         matrix_norms = np.linalg.norm(matrix, axis=1, keepdims=True)
@@ -150,7 +159,12 @@ class EmbeddingStore:
         top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
 
         return [
-            {"text": texts[i], "url": urls[i], "score": float(scores[i])}
+            {
+                "text": texts[i],
+                "url": urls[i],
+                "score": float(scores[i]),
+                "title": titles[i],
+            }
             for i in top_indices
         ]
 
