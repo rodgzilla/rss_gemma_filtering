@@ -174,54 +174,128 @@ def write_score_viz(
 ) -> None:
     """Write a self-contained interactive HTML visualisation.
 
-    Three panels:
-      1. Scatter: aggregated score vs top-1 similarity (kept/rejected), with
-         separate threshold lines for reading entries (red) and arXiv (orange)
-      2. UMAP 2-D projection: vault background (subsampled) + new entries foreground
-      3. UMAP 2-D projection fitted on RSS entries only (no vault background)
+    Two rows × three columns:
+      Row 1 (Reading): scatter, vault-fitted UMAP, RSS-only UMAP
+      Row 2 (arXiv):   scatter, vault-fitted UMAP, RSS-only UMAP
 
     Args:
         threshold_reading: Score threshold used for general reading entries.
         threshold_arxiv:   Score threshold used for arXiv entries.
-        vault_bg_max: Maximum number of vault background points shown in panel 2.
-                      If the vault is larger a random subsample is drawn (seed=42).
+        vault_bg_max: Maximum number of vault background points shown in UMAP
+                      panels.  If the vault is larger a random subsample is
+                      drawn (seed=42).
     """
     if not results:
         print("  No entries to visualise — skipping HTML output.")
         return
 
-    scores = np.array([m["agg_score"] for m in entry_metadata])
-    top1_sims = np.array(
-        [m["exemplars"][0]["score"] if m["exemplars"] else 0.0 for m in entry_metadata]
-    )
-    kept_mask = np.array([r.keep for r in results])
-    hovers = [_build_hover(r, m) for r, m in zip(results, entry_metadata)]
+    # --- Split into reading / arXiv groups ---
+    reading_pairs = [
+        (r, m) for r, m in zip(results, entry_metadata) if not r.entry.is_arxiv
+    ]
+    arxiv_pairs = [(r, m) for r, m in zip(results, entry_metadata) if r.entry.is_arxiv]
+
+    def _group_arrays(pairs):
+        if not pairs:
+            return np.array([]), np.array([]), np.array([], dtype=bool), [], None
+        rs, ms = zip(*pairs)
+        scores = np.array([m["agg_score"] for m in ms])
+        top1 = np.array(
+            [m["exemplars"][0]["score"] if m["exemplars"] else 0.0 for m in ms]
+        )
+        kept = np.array([r.keep for r in rs])
+        hovers = [_build_hover(r, m) for r, m in zip(rs, ms)]
+        if len(ms) >= 2:
+            matrix = np.stack([m["embedding_128"] for m in ms], axis=0).astype(
+                np.float32
+            )
+        else:
+            matrix = None
+        return scores, top1, kept, hovers, matrix
+
+    r_scores, r_top1, r_kept, r_hovers, r_matrix = _group_arrays(reading_pairs)
+    a_scores, a_top1, a_kept, a_hovers, a_matrix = _group_arrays(arxiv_pairs)
 
     kept_colour = "#2ecc71"
     rejected_colour = "#bdc3c7"
 
-    # --- Panel 1: score vs top-1 similarity scatter ---
-    def _scatter(mask: np.ndarray, name: str, colour: str, xax: str, yax: str) -> dict:
+    # --- Scatter trace builder ---
+    def _scatter(scores, top1, kept, hovers, mask, name, colour, xax, yax):
         idx = np.where(mask)[0].tolist()
         return {
             "type": "scatter",
             "x": scores[mask].tolist(),
-            "y": top1_sims[mask].tolist(),
+            "y": top1[mask].tolist(),
             "mode": "markers",
             "name": name,
-            "marker": {"color": colour, "size": 8, "opacity": 0.8},
+            "marker": {"color": colour, "size": 8, "opacity": 0.4},
             "text": [hovers[i] for i in idx],
             "hovertemplate": "%{text}<extra></extra>",
             "xaxis": xax,
             "yaxis": yax,
         }
 
-    p1_kept = _scatter(kept_mask, "Kept", kept_colour, "x1", "y1")
-    p1_rej = _scatter(~kept_mask, "Rejected", rejected_colour, "x1", "y1")
+    all_traces: list[dict] = []
 
-    # --- Panel 2: UMAP vault-fitted projection ---
+    # Row 1 — Reading scatter (x1/y1)
+    if len(r_scores):
+        all_traces.append(
+            _scatter(
+                r_scores,
+                r_top1,
+                r_kept,
+                r_hovers,
+                r_kept,
+                "Kept",
+                kept_colour,
+                "x1",
+                "y1",
+            )
+        )
+        all_traces.append(
+            _scatter(
+                r_scores,
+                r_top1,
+                r_kept,
+                r_hovers,
+                ~r_kept,
+                "Rejected",
+                rejected_colour,
+                "x1",
+                "y1",
+            )
+        )
 
-    # Subsample vault background
+    # Row 2 — arXiv scatter (x4/y4)
+    if len(a_scores):
+        all_traces.append(
+            _scatter(
+                a_scores,
+                a_top1,
+                a_kept,
+                a_hovers,
+                a_kept,
+                "Kept",
+                kept_colour,
+                "x4",
+                "y4",
+            )
+        )
+        all_traces.append(
+            _scatter(
+                a_scores,
+                a_top1,
+                a_kept,
+                a_hovers,
+                ~a_kept,
+                "Rejected",
+                rejected_colour,
+                "x4",
+                "y4",
+            )
+        )
+
+    # --- Vault background (shared between rows) ---
     vault_2d_bg = vault_2d
     vault_docs_bg = vault_docs
     if len(vault_2d) > vault_bg_max:
@@ -231,146 +305,146 @@ def write_score_viz(
         vault_2d_bg = vault_2d[idx_bg]
         vault_docs_bg = [vault_docs[i] for i in idx_bg]
 
-    # Transform new entries with the vault-fitted UMAP
-    umap_xy: np.ndarray | None = None
-    new_matrix: np.ndarray | None = None
-    if len(entry_metadata) >= 2:
-        new_matrix = np.stack(
-            [m["embedding_128"] for m in entry_metadata], axis=0
-        ).astype(np.float32)
-        if umap_reducer is not None:
-            try:
-                umap_xy = umap_reducer.transform(new_matrix).astype(np.float32)
-            except Exception as e:
-                print(f"  [WARN] UMAP transform failed: {e}")
-                umap_xy = None
-
-    p2_traces: list[dict] = []
-    if vault_2d_bg is not None and len(vault_2d_bg) > 0:
+    def _vault_trace(xax, yax):
         vault_hover = [
             f"<b>{_truncate(d['text'], 100)}</b><br>Source: {d['source_note']}"
             for d in vault_docs_bg
         ]
-        p2_traces.append(
-            {
-                "type": "scatter",
-                "x": vault_2d_bg[:, 0].tolist(),
-                "y": vault_2d_bg[:, 1].tolist(),
-                "mode": "markers",
-                "name": "Vault",
-                "marker": {
-                    "color": "#ecf0f1",
-                    "size": 4,
-                    "opacity": 0.5,
-                    "line": {"color": "#95a5a6", "width": 0.5},
-                },
-                "text": vault_hover,
-                "hovertemplate": "%{text}<extra></extra>",
-                "xaxis": "x3",
-                "yaxis": "y3",
-            }
-        )
+        return {
+            "type": "scatter",
+            "x": vault_2d_bg[:, 0].tolist(),
+            "y": vault_2d_bg[:, 1].tolist(),
+            "mode": "markers",
+            "name": "Vault",
+            "showlegend": False,
+            "marker": {
+                "color": "#ecf0f1",
+                "size": 4,
+                "opacity": 0.5,
+                "line": {"color": "#95a5a6", "width": 0.5},
+            },
+            "text": vault_hover,
+            "hovertemplate": "%{text}<extra></extra>",
+            "xaxis": xax,
+            "yaxis": yax,
+        }
 
-    if umap_xy is not None:
+    def _umap_scatter(xy, mask, hovers, name, colour, xax, yax, showlegend=False):
+        idx = np.where(mask)[0].tolist()
+        return {
+            "type": "scatter",
+            "x": xy[mask, 0].tolist(),
+            "y": xy[mask, 1].tolist(),
+            "mode": "markers",
+            "name": name,
+            "showlegend": showlegend,
+            "marker": {
+                "color": colour,
+                "size": 10,
+                "opacity": 0.5,
+                "line": {"color": "white", "width": 1},
+            },
+            "text": [hovers[i] for i in idx],
+            "hovertemplate": "%{text}<extra></extra>",
+            "xaxis": xax,
+            "yaxis": yax,
+        }
 
-        def _umap_scatter(mask: np.ndarray, name: str, colour: str) -> dict:
-            idx = np.where(mask)[0].tolist()
-            return {
-                "type": "scatter",
-                "x": umap_xy[mask, 0].tolist(),
-                "y": umap_xy[mask, 1].tolist(),
-                "mode": "markers",
-                "name": name,
-                "showlegend": False,
-                "marker": {
-                    "color": colour,
-                    "size": 10,
-                    "opacity": 0.9,
-                    "line": {"color": "white", "width": 1},
-                },
-                "text": [hovers[i] for i in idx],
-                "hovertemplate": "%{text}<extra></extra>",
-                "xaxis": "x3",
-                "yaxis": "y3",
-            }
+    # --- Vault-fitted UMAP transform per group ---
+    def _vault_umap_traces(matrix, kept, hovers, xax, yax):
+        traces = []
+        if vault_2d_bg is not None and len(vault_2d_bg) > 0:
+            traces.append(_vault_trace(xax, yax))
+        if matrix is not None and umap_reducer is not None:
+            try:
+                xy = umap_reducer.transform(matrix).astype(np.float32)
+                traces.append(
+                    _umap_scatter(xy, kept, hovers, "Kept", kept_colour, xax, yax)
+                )
+                traces.append(
+                    _umap_scatter(
+                        xy, ~kept, hovers, "Rejected", rejected_colour, xax, yax
+                    )
+                )
+            except Exception as e:
+                print(f"  [WARN] UMAP transform failed: {e}")
+        return traces
 
-        p2_traces.append(_umap_scatter(kept_mask, "Kept", kept_colour))
-        p2_traces.append(_umap_scatter(~kept_mask, "Rejected", rejected_colour))
+    all_traces += _vault_umap_traces(r_matrix, r_kept, r_hovers, "x2", "y2")
+    all_traces += _vault_umap_traces(a_matrix, a_kept, a_hovers, "x5", "y5")
 
-    # --- Panel 3: UMAP fitted on RSS entries only ---
-    p3_traces: list[dict] = []
-    if new_matrix is not None and len(new_matrix) >= 2:
+    # --- RSS-only UMAP per group ---
+    def _rss_umap_traces(matrix, kept, hovers, xax, yax):
+        if matrix is None or len(matrix) < 2:
+            return []
         try:
             print("  Fitting UMAP on RSS entries only…")
             rss_reducer = umap.UMAP(**_UMAP_PARAMS)
-            rss_2d = rss_reducer.fit_transform(new_matrix).astype(np.float32)
-
-            def _rss_scatter(mask: np.ndarray, name: str, colour: str) -> dict:
-                idx = np.where(mask)[0].tolist()
-                return {
-                    "type": "scatter",
-                    "x": rss_2d[mask, 0].tolist(),
-                    "y": rss_2d[mask, 1].tolist(),
-                    "mode": "markers",
-                    "name": name,
-                    "showlegend": False,
-                    "marker": {
-                        "color": colour,
-                        "size": 10,
-                        "opacity": 0.9,
-                        "line": {"color": "white", "width": 1},
-                    },
-                    "text": [hovers[i] for i in idx],
-                    "hovertemplate": "%{text}<extra></extra>",
-                    "xaxis": "x5",
-                    "yaxis": "y5",
-                }
-
-            p3_traces.append(_rss_scatter(kept_mask, "Kept", kept_colour))
-            p3_traces.append(_rss_scatter(~kept_mask, "Rejected", rejected_colour))
+            xy = rss_reducer.fit_transform(matrix).astype(np.float32)
+            return [
+                _umap_scatter(xy, kept, hovers, "Kept", kept_colour, xax, yax),
+                _umap_scatter(xy, ~kept, hovers, "Rejected", rejected_colour, xax, yax),
+            ]
         except Exception as e:
             print(f"  [WARN] RSS-only UMAP failed: {e}")
+            return []
 
-    all_traces = [p1_kept, p1_rej] + p2_traces + p3_traces
+    all_traces += _rss_umap_traces(r_matrix, r_kept, r_hovers, "x3", "y3")
+    all_traces += _rss_umap_traces(a_matrix, a_kept, a_hovers, "x6", "y6")
+
     traces_json = json.dumps(all_traces)
 
     today = date.today().isoformat()
-    n_kept = int(kept_mask.sum())
+    n_kept = sum(r.keep for r in results)
     n_total = len(results)
+
+    # --- Layout: 2 rows × 3 columns ---
+    # y domains:  top row [0.55, 1.00], bottom row [0.00, 0.45]
+    # x domains:  left [0.00,0.30], mid [0.37,0.63], right [0.70,1.00]
+    TOP_Y = [0.55, 1.00]
+    BOT_Y = [0.00, 0.45]
+    LEFT_X = [0.00, 0.30]
+    MID_X = [0.37, 0.63]
+    RIGHT_X = [0.70, 1.00]
 
     layout = {
         "title": {"text": f"RSS Score Analysis — {today} ({n_kept}/{n_total} kept)"},
         "hovermode": "closest",
-        # Panel 1: left third — score vs top-1 scatter
-        "xaxis": {"domain": [0.00, 0.30], "title": "Aggregated score", "anchor": "y1"},
-        "yaxis": {"domain": [0.00, 1.00], "title": "Top-1 similarity", "anchor": "x1"},
-        # Panel 2: middle third — vault-fitted UMAP
-        "xaxis3": {"domain": [0.37, 0.63], "title": "UMAP dim 1", "anchor": "y3"},
-        "yaxis3": {"domain": [0.00, 1.00], "title": "UMAP dim 2", "anchor": "x3"},
-        # Panel 3: right third — RSS-only UMAP
-        "xaxis5": {"domain": [0.70, 1.00], "title": "UMAP dim 1", "anchor": "y5"},
-        "yaxis5": {"domain": [0.00, 1.00], "title": "UMAP dim 2", "anchor": "x5"},
+        # Row 1 — Reading
+        "xaxis": {"domain": LEFT_X, "title": "Aggregated score", "anchor": "y1"},
+        "yaxis": {"domain": TOP_Y, "title": "Top-1 similarity", "anchor": "x1"},
+        "xaxis2": {"domain": MID_X, "title": "UMAP dim 1", "anchor": "y2"},
+        "yaxis2": {"domain": TOP_Y, "title": "UMAP dim 2", "anchor": "x2"},
+        "xaxis3": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y3"},
+        "yaxis3": {"domain": TOP_Y, "title": "UMAP dim 2", "anchor": "x3"},
+        # Row 2 — arXiv
+        "xaxis4": {"domain": LEFT_X, "title": "Aggregated score", "anchor": "y4"},
+        "yaxis4": {"domain": BOT_Y, "title": "Top-1 similarity", "anchor": "x4"},
+        "xaxis5": {"domain": MID_X, "title": "UMAP dim 1", "anchor": "y5"},
+        "yaxis5": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x5"},
+        "xaxis6": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y6"},
+        "yaxis6": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x6"},
         "legend": {"orientation": "h", "y": -0.05},
         "paper_bgcolor": "#1e1e2e",
         "plot_bgcolor": "#2a2a3e",
         "font": {"color": "#cdd6f4"},
         "shapes": [
-            # Reading threshold line (red)
+            # Reading threshold (red, row 1 scatter)
             {
                 "type": "line",
                 "xref": "x1",
-                "yref": "paper",
+                "yref": "y1 domain",
                 "x0": threshold_reading,
                 "x1": threshold_reading,
                 "y0": 0,
                 "y1": 1,
                 "line": {"color": "#e74c3c", "width": 2, "dash": "dash"},
             },
-            # arXiv threshold line (orange)
+            # arXiv threshold (orange, row 2 scatter)
             {
                 "type": "line",
-                "xref": "x1",
-                "yref": "paper",
+                "xref": "x4",
+                "yref": "y4 domain",
                 "x0": threshold_arxiv,
                 "x1": threshold_arxiv,
                 "y0": 0,
@@ -379,37 +453,60 @@ def write_score_viz(
             },
         ],
         "annotations": [
+            # --- Column headings (top of page) ---
             {
                 "text": "Score vs Top-1 Similarity",
                 "xref": "paper",
                 "yref": "paper",
                 "x": 0.15,
-                "y": 1.03,
+                "y": 1.04,
                 "showarrow": False,
-                "font": {"size": 13},
+                "font": {"size": 12, "color": "#a6adc8"},
             },
             {
                 "text": "UMAP — vault projection",
                 "xref": "paper",
                 "yref": "paper",
                 "x": 0.50,
-                "y": 1.03,
+                "y": 1.04,
                 "showarrow": False,
-                "font": {"size": 13},
+                "font": {"size": 12, "color": "#a6adc8"},
             },
             {
                 "text": "UMAP — RSS entries only",
                 "xref": "paper",
                 "yref": "paper",
                 "x": 0.85,
-                "y": 1.03,
+                "y": 1.04,
                 "showarrow": False,
-                "font": {"size": 13},
+                "font": {"size": 12, "color": "#a6adc8"},
             },
+            # --- Row labels ---
+            {
+                "text": "<b>Reading</b>",
+                "xref": "paper",
+                "yref": "paper",
+                "x": -0.01,
+                "y": (TOP_Y[0] + TOP_Y[1]) / 2,
+                "showarrow": False,
+                "textangle": -90,
+                "font": {"size": 13, "color": "#cdd6f4"},
+            },
+            {
+                "text": "<b>arXiv</b>",
+                "xref": "paper",
+                "yref": "paper",
+                "x": -0.01,
+                "y": (BOT_Y[0] + BOT_Y[1]) / 2,
+                "showarrow": False,
+                "textangle": -90,
+                "font": {"size": 13, "color": "#cdd6f4"},
+            },
+            # --- Threshold labels ---
             {
                 "text": f"reading = {threshold_reading:.4f}",
                 "xref": "x1",
-                "yref": "paper",
+                "yref": "y1 domain",
                 "x": threshold_reading,
                 "y": 0.97,
                 "showarrow": False,
@@ -417,10 +514,10 @@ def write_score_viz(
             },
             {
                 "text": f"arxiv = {threshold_arxiv:.4f}",
-                "xref": "x1",
-                "yref": "paper",
+                "xref": "x4",
+                "yref": "y4 domain",
                 "x": threshold_arxiv,
-                "y": 0.91,
+                "y": 0.97,
                 "showarrow": False,
                 "font": {"color": "#f39c12", "size": 11},
             },

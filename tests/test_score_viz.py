@@ -199,3 +199,118 @@ class TestWriteScoreViz:
         assert out.exists()
         html = out.read_text()
         assert "Plotly.newPlot" in html
+
+    # --- 2×3 layout tests ---
+
+    def _mixed_call(self, tmp_path: Path, n_reading: int = 3, n_arxiv: int = 3):
+        """Helper that produces a mix of reading and arXiv entries."""
+        reading = [
+            _result(f"Reading {i}", keep=(i % 2 == 0), score=0.8 if i % 2 == 0 else 0.3)
+            for i in range(n_reading)
+        ]
+        arxiv = [
+            _result(
+                f"Arxiv {i}",
+                keep=(i % 2 == 0),
+                score=0.7 if i % 2 == 0 else 0.2,
+                is_arxiv=True,
+            )
+            for i in range(n_arxiv)
+        ]
+        results = reading + arxiv
+        metadata = [_meta(r.score) for r in results]
+        umap_reducer = MagicMock()
+        umap_reducer.transform.return_value = np.random.rand(len(results), 2).astype(
+            np.float32
+        )
+        out = tmp_path / "RSS-2024-01-01-scores.html"
+        write_score_viz(
+            results=results,
+            entry_metadata=metadata,
+            vault_2d=_vault_2d(),
+            vault_docs=_vault_docs(),
+            umap_reducer=umap_reducer,
+            threshold_reading=0.5,
+            threshold_arxiv=0.4,
+            output_path=out,
+        )
+        return out
+
+    def test_html_has_reading_row_label(self, tmp_path):
+        """HTML must contain a 'Reading' section label."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        assert "Reading" in html
+
+    def test_html_has_arxiv_row_label(self, tmp_path):
+        """HTML must contain an 'arXiv' section label."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        assert "arXiv" in html
+
+    def test_html_has_six_axis_domains(self, tmp_path):
+        """Layout must define 6 independent axis pairs for the 2×3 grid."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        import json, re
+
+        layout_match = re.search(r"var layout = ({.*?});\s*Plotly", html, re.DOTALL)
+        assert layout_match, "Could not find layout JSON in HTML"
+        layout = json.loads(layout_match.group(1))
+        xaxis_keys = [k for k in layout if k.startswith("xaxis")]
+        assert len(xaxis_keys) >= 6, f"Expected ≥6 xaxis keys, got {xaxis_keys}"
+
+    def test_scatter_marker_opacity_low(self, tmp_path):
+        """Score-scatter markers must have opacity ≤ 0.5 for readability."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        import json, re
+
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        assert traces_match, "Could not find traces JSON in HTML"
+        traces = json.loads(traces_match.group(1))
+        scatter_traces = [
+            t
+            for t in traces
+            if t.get("type") == "scatter" and t.get("xaxis") in ("x1", "x4")
+        ]
+        assert scatter_traces, "No score-scatter traces found"
+        for t in scatter_traces:
+            opacity = t["marker"]["opacity"]
+            assert opacity <= 0.5, f"Expected opacity ≤ 0.5, got {opacity}"
+
+    def test_reading_entries_in_reading_row(self, tmp_path):
+        """Reading article titles must appear in traces assigned to the reading row."""
+        out = self._mixed_call(tmp_path, n_reading=2, n_arxiv=2)
+        html = out.read_text()
+        import json, re
+
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        reading_row_text = " ".join(
+            str(t.get("text", ""))
+            for t in traces
+            if t.get("xaxis") in ("x1", "x2", "x3")
+        )
+        assert "Reading 0" in reading_row_text
+
+    def test_arxiv_entries_in_arxiv_row(self, tmp_path):
+        """arXiv article titles must appear in traces assigned to the arXiv row."""
+        out = self._mixed_call(tmp_path, n_reading=2, n_arxiv=2)
+        html = out.read_text()
+        import json, re
+
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        arxiv_row_text = " ".join(
+            str(t.get("text", ""))
+            for t in traces
+            if t.get("xaxis") in ("x4", "x5", "x6")
+        )
+        assert "Arxiv 0" in arxiv_row_text
