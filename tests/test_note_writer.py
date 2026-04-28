@@ -161,6 +161,18 @@ def test_build_note_content_frontmatter_contains_rss_and_embedding_tags():
     assert "- embedding" in content
 
 
+def test_build_note_content_frontmatter_has_cssclasses_tracker():
+    content = build_note_content([], [], date="2025-01-15")
+    assert "cssclasses:" in content
+    assert "- tracker" in content
+
+
+def test_build_note_content_frontmatter_has_up_daily_note_link():
+    content = build_note_content([], [], date="2025-01-15")
+    assert "up:" in content
+    assert "[[2025-01-15]]" in content
+
+
 def test_build_note_content_frontmatter_closes_before_heading():
     """The closing --- must appear before the # heading."""
     content = build_note_content([], [], date="2025-01-15")
@@ -180,7 +192,6 @@ def test_build_note_content_includes_viz_block_when_viz_filename_given():
         [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
     )
     assert "dataviewjs" in content
-    assert "RSS-2025-01-15-scores.html" in content
 
 
 def test_build_note_content_viz_block_uses_getResourcePath():
@@ -190,6 +201,14 @@ def test_build_note_content_viz_block_uses_getResourcePath():
     )
     assert "getResourcePath" in content
     assert "getAbstractFileByPath" in content
+
+
+def test_build_note_content_viz_block_derives_filename_from_note_name():
+    """Filename must be derived from dv.current().file.name, not hardcoded."""
+    content = build_note_content(
+        [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    assert "dv.current().file.name" in content
 
 
 def test_build_note_content_viz_block_appears_before_content():
@@ -273,7 +292,7 @@ def test_write_note_passes_viz_filename_to_content(tmp_path):
 
     content = (tmp_path / "Filtered feed" / "RSS-2025-01-15.md").read_text()
     assert "dataviewjs" in content
-    assert "RSS-2025-01-15-scores.html" in content
+    assert "dv.current().file.name" in content
 
 
 def test_write_note_no_viz_block_without_viz_filename(tmp_path):

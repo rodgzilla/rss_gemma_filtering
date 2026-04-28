@@ -27,10 +27,16 @@ def _render_exemplars(exemplars: list[dict]) -> list[str]:
     return lines
 
 
-def _render_frontmatter(tags: list[str]) -> str:
-    """Return a YAML frontmatter block with the given tags."""
+def _render_frontmatter(tags: list[str], date: str) -> str:
+    """Return a YAML frontmatter block with the given tags and daily-note link."""
     tag_lines = "\n".join(f"  - {t}" for t in tags)
-    return f"---\ntags:\n{tag_lines}\n---\n"
+    return (
+        f"---\n"
+        f"tags:\n{tag_lines}\n"
+        f"cssclasses:\n  - tracker\n"
+        f'up:\n  - "[[{date}]]"\n'
+        f"---\n"
+    )
 
 
 def _render_viz_block(viz_filename: str) -> str:
@@ -38,14 +44,15 @@ def _render_viz_block(viz_filename: str) -> str:
 
     Uses app.vault.getResourcePath() to resolve the file to its native
     app:// URL at render time, so no machine-specific path is stored in the
-    note itself.  The HTML file is assumed to live in the same vault folder
-    as the note.
+    note itself.  The filename is derived from the note's own name so it
+    stays portable across machines.
     """
     js = (
-        f'const filename = "{viz_filename}";\n'
+        'const filename = dv.current().file.name.replace(/\\.md$/, "") + "-scores.html";\n'
         "const folder = dv.current().file.folder;\n"
-        'const tfile = app.vault.getAbstractFileByPath(folder + "/" + filename);\n'
-        'const src = tfile ? app.vault.getResourcePath(tfile) : "file not found: " + folder + "/" + filename;\n'
+        'const vaultPath = folder + "/" + filename;\n'
+        "const tfile = app.vault.getAbstractFileByPath(vaultPath);\n"
+        'const src = tfile ? app.vault.getResourcePath(tfile) : "not found: " + vaultPath;\n'
         'dv.el("iframe", "", {attr: {src: src, style: "height:100%;width:100%;aspect-ratio:16/9;", allow: "fullscreen", allowfullscreen: ""}});\n'
     )
     return f"```dataviewjs\n{js}```\n"
@@ -97,7 +104,7 @@ def build_note_content(
     """
     effective_tags = tags if tags is not None else _DEFAULT_TAGS
     parts: list[str] = [
-        _render_frontmatter(effective_tags),
+        _render_frontmatter(effective_tags, date),
         f"# RSS Digest — {date}",
         "",
     ]
