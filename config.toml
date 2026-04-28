@@ -10,3 +10,9 @@ interest_profile = "interest_profile.md"
 [vault]
 daily_notes_folder = "Daily notes"
 output_folder = "Filtered feed"
+
+[embedding]
+model = "text-embedding-embeddinggemma-300m-qat"
+base_url = "http://localhost:1234/v1"
+store_path = "embedding_store.db"
+top_k = 3
