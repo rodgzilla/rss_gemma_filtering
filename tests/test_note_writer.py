@@ -169,29 +169,31 @@ def test_build_note_content_frontmatter_closes_before_heading():
     assert close_pos < heading_pos
 
 
-def test_build_note_content_no_iframe_when_viz_filename_not_given():
+def test_build_note_content_no_viz_block_when_viz_filename_not_given():
     content = build_note_content([], [], date="2025-01-15")
+    assert "dataviewjs" not in content
     assert "<iframe" not in content
 
 
-def test_build_note_content_includes_iframe_when_viz_filename_given():
+def test_build_note_content_includes_viz_block_when_viz_filename_given():
     content = build_note_content(
         [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
     )
-    assert "<iframe" in content
+    assert "dataviewjs" in content
     assert "RSS-2025-01-15-scores.html" in content
 
 
-def test_build_note_content_iframe_src_uses_dot_slash():
-    """src must use './' prefix so Obsidian resolves it on the app:// origin."""
+def test_build_note_content_viz_block_uses_getResourcePath():
+    """Block must use app.vault.getResourcePath for portable app:// resolution."""
     content = build_note_content(
         [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
     )
-    assert 'src="./RSS-2025-01-15-scores.html"' in content
+    assert "getResourcePath" in content
+    assert "getAbstractFileByPath" in content
 
 
-def test_build_note_content_iframe_appears_before_content():
-    """iframe block must come before the article sections."""
+def test_build_note_content_viz_block_appears_before_content():
+    """DataviewJS viz block must come before the article sections."""
     reading = [
         FilterResult(
             entry=RSSEntry(
@@ -210,9 +212,9 @@ def test_build_note_content_iframe_appears_before_content():
     content = build_note_content(
         reading, [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
     )
-    iframe_pos = content.index("<iframe")
+    viz_pos = content.index("dataviewjs")
     heading_pos = content.index("## Reading")
-    assert iframe_pos < heading_pos
+    assert viz_pos < heading_pos
 
 
 # ---------------------------------------------------------------------------
@@ -270,13 +272,13 @@ def test_write_note_passes_viz_filename_to_content(tmp_path):
     )
 
     content = (tmp_path / "Filtered feed" / "RSS-2025-01-15.md").read_text()
-    assert "<iframe" in content
+    assert "dataviewjs" in content
     assert "RSS-2025-01-15-scores.html" in content
 
 
-def test_write_note_no_iframe_without_viz_filename(tmp_path):
+def test_write_note_no_viz_block_without_viz_filename(tmp_path):
     reading = [_make_result("Blog", "https://blog.com", is_arxiv=False)]
     write_note(tmp_path, reading, [], date="2025-01-15")
 
     content = (tmp_path / "Filtered feed" / "RSS-2025-01-15.md").read_text()
-    assert "<iframe" not in content
+    assert "dataviewjs" not in content

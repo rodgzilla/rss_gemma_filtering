@@ -33,6 +33,24 @@ def _render_frontmatter(tags: list[str]) -> str:
     return f"---\ntags:\n{tag_lines}\n---\n"
 
 
+def _render_viz_block(viz_filename: str) -> str:
+    """Return a DataviewJS block that embeds the companion HTML visualisation.
+
+    Uses app.vault.getResourcePath() to resolve the file to its native
+    app:// URL at render time, so no machine-specific path is stored in the
+    note itself.  The HTML file is assumed to live in the same vault folder
+    as the note.
+    """
+    js = (
+        f'const filename = "{viz_filename}";\n'
+        "const folder = dv.current().file.folder;\n"
+        'const tfile = app.vault.getAbstractFileByPath(folder + "/" + filename);\n'
+        'const src = tfile ? app.vault.getResourcePath(tfile) : "file not found: " + folder + "/" + filename;\n'
+        'dv.el("iframe", "", {attr: {src: src, style: "height:100%;width:100%;aspect-ratio:16/9;", allow: "fullscreen", allowfullscreen: ""}});\n'
+    )
+    return f"```dataviewjs\n{js}```\n"
+
+
 def render_reading_section(results: List[FilterResult]) -> str:
     """Render the ## Reading section from a list of FilterResult objects."""
     if not results:
@@ -84,10 +102,7 @@ def build_note_content(
         "",
     ]
     if viz_filename:
-        parts.append(
-            f'<iframe src="./{viz_filename}" allow="fullscreen" allowfullscreen="" '
-            f'style="height:100%;width:100%; aspect-ratio: 16 / 9; "></iframe>\n'
-        )
+        parts.append(_render_viz_block(viz_filename))
     reading_section = render_reading_section(reading_results)
     if reading_section:
         parts.append(reading_section)
