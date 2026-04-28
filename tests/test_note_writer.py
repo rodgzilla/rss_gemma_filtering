@@ -149,6 +149,47 @@ def test_build_note_content_omits_empty_sections():
     assert "## Arxiv monitoring" not in content
 
 
+def test_build_note_content_has_yaml_frontmatter():
+    content = build_note_content([], [], date="2025-01-15")
+    assert content.startswith("---\n")
+    assert "tags:" in content
+
+
+def test_build_note_content_frontmatter_contains_rss_and_embedding_tags():
+    content = build_note_content([], [], date="2025-01-15")
+    assert "- rss" in content
+    assert "- embedding" in content
+
+
+def test_build_note_content_frontmatter_closes_before_heading():
+    """The closing --- must appear before the # heading."""
+    content = build_note_content([], [], date="2025-01-15")
+    close_pos = content.index("---\n", 1)  # second occurrence closes frontmatter
+    heading_pos = content.index("# RSS Digest")
+    assert close_pos < heading_pos
+
+
+def test_build_note_content_no_iframe_when_viz_filename_not_given():
+    content = build_note_content([], [], date="2025-01-15")
+    assert "<iframe" not in content
+
+
+def test_build_note_content_includes_iframe_when_viz_filename_given():
+    content = build_note_content(
+        [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    assert "<iframe" in content
+    assert "RSS-2025-01-15-scores.html" in content
+
+
+def test_build_note_content_iframe_src_is_bare_filename():
+    """src must be the bare filename with no path prefix — ensures portability."""
+    content = build_note_content(
+        [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    assert 'src="RSS-2025-01-15-scores.html"' in content
+
+
 # ---------------------------------------------------------------------------
 # write_note
 # ---------------------------------------------------------------------------
@@ -191,3 +232,26 @@ def test_write_note_file_contains_correct_content(tmp_path):
     assert "Cool Blog" in content
     assert "https://cool.com" in content
     assert "Cool tech article" in content
+
+
+def test_write_note_passes_viz_filename_to_content(tmp_path):
+    reading = [_make_result("Blog", "https://blog.com", is_arxiv=False)]
+    write_note(
+        tmp_path,
+        reading,
+        [],
+        date="2025-01-15",
+        viz_filename="RSS-2025-01-15-scores.html",
+    )
+
+    content = (tmp_path / "Filtered feed" / "RSS-2025-01-15.md").read_text()
+    assert "<iframe" in content
+    assert "RSS-2025-01-15-scores.html" in content
+
+
+def test_write_note_no_iframe_without_viz_filename(tmp_path):
+    reading = [_make_result("Blog", "https://blog.com", is_arxiv=False)]
+    write_note(tmp_path, reading, [], date="2025-01-15")
+
+    content = (tmp_path / "Filtered feed" / "RSS-2025-01-15.md").read_text()
+    assert "<iframe" not in content

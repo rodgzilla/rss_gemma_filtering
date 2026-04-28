@@ -16,22 +16,24 @@ from rss_filter.score_viz import write_score_viz
 # ---------------------------------------------------------------------------
 
 
-def _entry(title: str) -> RSSEntry:
+def _entry(title: str, is_arxiv: bool = False) -> RSSEntry:
     return RSSEntry(
         title=title,
         url=f"http://example.com/{title.replace(' ', '_')}",
         summary="Summary.",
         feed_name="Test Feed",
-        is_arxiv=False,
+        is_arxiv=is_arxiv,
         guid=title,
     )
 
 
-def _result(title: str, keep: bool, score: float) -> FilterResult:
+def _result(
+    title: str, keep: bool, score: float, is_arxiv: bool = False
+) -> FilterResult:
     return FilterResult(
-        entry=_entry(title),
+        entry=_entry(title, is_arxiv=is_arxiv),
         keep=keep,
-        reason=f"embedding score {score:.4f} (threshold 0.5000)",
+        reason=f"embedding score {score:.4f}",
         score=score,
     )
 
@@ -74,6 +76,8 @@ class TestWriteScoreViz:
         n_entries: int = 2,
         vault_bg_max: int = 500,
         n_vault: int = 5,
+        threshold_reading: float = 0.5,
+        threshold_arxiv: float = 0.4,
     ):
         results = [
             _result(f"Article {i}", keep=(i % 2 == 0), score=0.8 if i % 2 == 0 else 0.3)
@@ -95,7 +99,8 @@ class TestWriteScoreViz:
             vault_2d=vault_2d,
             vault_docs=vault_docs,
             umap_reducer=umap_reducer,
-            threshold=0.5,
+            threshold_reading=threshold_reading,
+            threshold_arxiv=threshold_arxiv,
             output_path=out,
             vault_bg_max=vault_bg_max,
         )
@@ -116,10 +121,23 @@ class TestWriteScoreViz:
         assert "Article 0" in html
         assert "Article 1" in html
 
-    def test_html_contains_threshold(self, tmp_path):
-        out = self._basic_call(tmp_path)
+    def test_html_contains_both_thresholds(self, tmp_path):
+        out = self._basic_call(tmp_path, threshold_reading=0.55, threshold_arxiv=0.40)
         html = out.read_text()
-        assert "0.5" in html
+        assert "0.55" in html
+        assert "0.40" in html
+
+    def test_html_contains_reading_threshold_line(self, tmp_path):
+        out = self._basic_call(tmp_path, threshold_reading=0.55, threshold_arxiv=0.40)
+        html = out.read_text()
+        # Reading threshold label must be present
+        assert "reading" in html.lower()
+
+    def test_html_contains_arxiv_threshold_line(self, tmp_path):
+        out = self._basic_call(tmp_path, threshold_reading=0.55, threshold_arxiv=0.40)
+        html = out.read_text()
+        # arXiv threshold line should use distinct orange colour
+        assert "#f39c12" in html
 
     def test_html_is_valid_structure(self, tmp_path):
         out = self._basic_call(tmp_path)
@@ -136,7 +154,8 @@ class TestWriteScoreViz:
             vault_2d=np.zeros((0, 2), dtype=np.float32),
             vault_docs=[],
             umap_reducer=None,
-            threshold=0.5,
+            threshold_reading=0.5,
+            threshold_arxiv=0.4,
             output_path=out,
         )
         assert not out.exists()
@@ -155,7 +174,8 @@ class TestWriteScoreViz:
             vault_2d=_vault_2d(),
             vault_docs=_vault_docs(),
             umap_reducer=None,
-            threshold=0.5,
+            threshold_reading=0.5,
+            threshold_arxiv=0.4,
             output_path=nested,
         )
         assert nested.exists()
@@ -177,7 +197,5 @@ class TestWriteScoreViz:
         """When vault is larger than vault_bg_max the file is still produced."""
         out = self._basic_call(tmp_path, n_vault=600, vault_bg_max=50)
         assert out.exists()
-        # The HTML should not contain all 600 vault docs — hard to count exactly,
-        # but the file must exist and be non-trivial.
         html = out.read_text()
         assert "Plotly.newPlot" in html

@@ -261,7 +261,14 @@ def main(argv: list[str] | None = None) -> None:
                 for ex in r.exemplars:
                     print(f"  - {ex['score']:.4f}  {ex['text']}")
     else:
-        write_note(args.vault, reading_results, arxiv_results, date=today)
+        viz_filename = f"RSS-{today}-scores.html"
+        write_note(
+            args.vault,
+            reading_results,
+            arxiv_results,
+            date=today,
+            viz_filename=viz_filename,
+        )
         if kept > 0:
             output = args.vault / vault_cfg["output_folder"] / f"RSS-{today}.md"
             print(f"\nNote written to: {output}")
@@ -287,7 +294,8 @@ def main(argv: list[str] | None = None) -> None:
                 vault_2d=vault_2d,
                 vault_docs=vault_docs,
                 umap_reducer=umap_reducer,
-                threshold=threshold_reading,
+                threshold_reading=threshold_reading,
+                threshold_arxiv=threshold_arxiv,
                 output_path=viz_path,
                 vault_bg_max=vault_bg_max,
             )

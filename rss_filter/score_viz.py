@@ -147,14 +147,17 @@ def _truncate(text: str, n: int = 80) -> str:
 def _build_hover(result: FilterResult, meta: dict) -> str:
     """Build a hover text string for an RSS entry."""
     entry = result.entry
+    entry_type = "arXiv" if entry.is_arxiv else "reading"
     lines = [
         f"<b>{_truncate(entry.title, 100)}</b>",
         f"Feed: {entry.feed_name}",
+        f"Type: {entry_type}",
         f"Score: {meta['agg_score']:.4f}",
         "---",
     ]
     for i, ex in enumerate(meta["exemplars"], 1):
-        lines.append(f"#{i}: {_truncate(ex['text'], 80)} ({ex['score']:.3f})")
+        label = ex.get("title") or ex["text"]
+        lines.append(f"#{i}: {_truncate(label, 80)} ({ex['score']:.3f})")
     return "<br>".join(lines)
 
 
@@ -164,18 +167,22 @@ def write_score_viz(
     vault_2d: np.ndarray,
     vault_docs: list[dict],
     umap_reducer,
-    threshold: float,
+    threshold_reading: float,
+    threshold_arxiv: float,
     output_path: Path,
     vault_bg_max: int = 500,
 ) -> None:
     """Write a self-contained interactive HTML visualisation.
 
     Three panels:
-      1. Scatter: aggregated score vs top-1 similarity (kept/rejected)
+      1. Scatter: aggregated score vs top-1 similarity (kept/rejected), with
+         separate threshold lines for reading entries (red) and arXiv (orange)
       2. UMAP 2-D projection: vault background (subsampled) + new entries foreground
       3. UMAP 2-D projection fitted on RSS entries only (no vault background)
 
     Args:
+        threshold_reading: Score threshold used for general reading entries.
+        threshold_arxiv:   Score threshold used for arXiv entries.
         vault_bg_max: Maximum number of vault background points shown in panel 2.
                       If the vault is larger a random subsample is drawn (seed=42).
     """
@@ -348,16 +355,27 @@ def write_score_viz(
         "plot_bgcolor": "#2a2a3e",
         "font": {"color": "#cdd6f4"},
         "shapes": [
-            # Threshold line on panel 1
+            # Reading threshold line (red)
             {
                 "type": "line",
                 "xref": "x1",
                 "yref": "paper",
-                "x0": threshold,
-                "x1": threshold,
+                "x0": threshold_reading,
+                "x1": threshold_reading,
                 "y0": 0,
                 "y1": 1,
                 "line": {"color": "#e74c3c", "width": 2, "dash": "dash"},
+            },
+            # arXiv threshold line (orange)
+            {
+                "type": "line",
+                "xref": "x1",
+                "yref": "paper",
+                "x0": threshold_arxiv,
+                "x1": threshold_arxiv,
+                "y0": 0,
+                "y1": 1,
+                "line": {"color": "#f39c12", "width": 2, "dash": "dash"},
             },
         ],
         "annotations": [
@@ -389,13 +407,22 @@ def write_score_viz(
                 "font": {"size": 13},
             },
             {
-                "text": f"threshold = {threshold:.4f}",
+                "text": f"reading = {threshold_reading:.4f}",
                 "xref": "x1",
                 "yref": "paper",
-                "x": threshold,
+                "x": threshold_reading,
                 "y": 0.97,
                 "showarrow": False,
                 "font": {"color": "#e74c3c", "size": 11},
+            },
+            {
+                "text": f"arxiv = {threshold_arxiv:.4f}",
+                "xref": "x1",
+                "yref": "paper",
+                "x": threshold_arxiv,
+                "y": 0.91,
+                "showarrow": False,
+                "font": {"color": "#f39c12", "size": 11},
             },
         ],
     }
