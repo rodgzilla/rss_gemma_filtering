@@ -182,12 +182,37 @@ def test_build_note_content_includes_iframe_when_viz_filename_given():
     assert "RSS-2025-01-15-scores.html" in content
 
 
-def test_build_note_content_iframe_src_is_bare_filename():
-    """src must be the bare filename with no path prefix — ensures portability."""
+def test_build_note_content_iframe_src_uses_dot_slash():
+    """src must use './' prefix so Obsidian resolves it on the app:// origin."""
     content = build_note_content(
         [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
     )
-    assert 'src="RSS-2025-01-15-scores.html"' in content
+    assert 'src="./RSS-2025-01-15-scores.html"' in content
+
+
+def test_build_note_content_iframe_appears_before_content():
+    """iframe block must come before the article sections."""
+    reading = [
+        FilterResult(
+            entry=RSSEntry(
+                title="Some Article",
+                url="http://x.com",
+                summary="s",
+                feed_name="F",
+                is_arxiv=False,
+                guid="g1",
+            ),
+            keep=True,
+            reason="ok",
+            score=0.9,
+        )
+    ]
+    content = build_note_content(
+        reading, [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    iframe_pos = content.index("<iframe")
+    heading_pos = content.index("## Reading")
+    assert iframe_pos < heading_pos
 
 
 # ---------------------------------------------------------------------------

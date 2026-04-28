@@ -78,18 +78,22 @@ def build_note_content(
                       same Obsidian folder.
     """
     effective_tags = tags if tags is not None else _DEFAULT_TAGS
-    parts = [_render_frontmatter(effective_tags), f"# RSS Digest — {date}", ""]
+    parts: list[str] = [
+        _render_frontmatter(effective_tags),
+        f"# RSS Digest — {date}",
+        "",
+    ]
+    if viz_filename:
+        parts.append(
+            f'<iframe src="./{viz_filename}" allow="fullscreen" allowfullscreen="" '
+            f'style="height:100%;width:100%; aspect-ratio: 16 / 9; "></iframe>\n'
+        )
     reading_section = render_reading_section(reading_results)
     if reading_section:
         parts.append(reading_section)
     arxiv_section = render_arxiv_section(arxiv_results)
     if arxiv_section:
         parts.append(arxiv_section)
-    if viz_filename:
-        parts.append(
-            f'<iframe src="{viz_filename}" allow="fullscreen" allowfullscreen="" '
-            f'style="height:100%;width:100%; aspect-ratio: 16 / 9; "></iframe>\n'
-        )
     return "\n".join(parts)
 
 
