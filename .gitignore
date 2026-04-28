@@ -9,3 +9,6 @@ build/
 seen_entries.json
 interest_profile.md
 mock_vault/Filtered feed/
+embedding_store.db
+umap_model.joblib
+umap_model.meta.json

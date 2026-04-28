@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
-import pytest
 
 from rss_filter.models import FilterResult, RSSEntry
-from rss_filter.score_viz import _kde, write_score_viz
+from rss_filter.score_viz import write_score_viz
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +39,7 @@ def _result(title: str, keep: bool, score: float) -> FilterResult:
 def _meta(score: float, embed_dim: int = 256) -> dict:
     return {
         "embedding": np.zeros(embed_dim, dtype=np.float32),
-        "embedding_128": np.zeros(128, dtype=np.float32),
+        "embedding_128": np.random.rand(128).astype(np.float32),
         "exemplars": [{"text": "Past article about topic", "score": score}],
         "agg_score": score,
     }
@@ -63,47 +62,29 @@ def _vault_docs(n: int = 5) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# _kde
-# ---------------------------------------------------------------------------
-
-
-class TestKde:
-    def test_returns_equal_length_lists(self):
-        x, y = _kde(np.array([0.1, 0.5, 0.9]))
-        assert len(x) == len(y)
-
-    def test_empty_input_returns_empty(self):
-        x, y = _kde(np.array([]))
-        assert x == []
-        assert y == []
-
-    def test_constant_input_returns_empty(self):
-        x, y = _kde(np.array([0.5, 0.5, 0.5]))
-        assert x == []
-        assert y == []
-
-    def test_kde_values_are_non_negative(self):
-        x, y = _kde(np.array([0.2, 0.5, 0.8, 0.3]))
-        assert all(v >= 0 for v in y)
-
-
-# ---------------------------------------------------------------------------
 # write_score_viz
 # ---------------------------------------------------------------------------
 
 
 class TestWriteScoreViz:
-    def _basic_call(self, tmp_path: Path, with_umap: bool = True):
+    def _basic_call(
+        self,
+        tmp_path: Path,
+        with_umap: bool = True,
+        n_entries: int = 2,
+        vault_bg_max: int = 500,
+        n_vault: int = 5,
+    ):
         results = [
-            _result("Kept Article", keep=True, score=0.8),
-            _result("Rejected Article", keep=False, score=0.3),
+            _result(f"Article {i}", keep=(i % 2 == 0), score=0.8 if i % 2 == 0 else 0.3)
+            for i in range(n_entries)
         ]
-        metadata = [_meta(0.8), _meta(0.3)]
-        vault_2d = _vault_2d()
-        vault_docs = _vault_docs()
+        metadata = [_meta(r.score) for r in results]
+        vault_2d = _vault_2d(n_vault)
+        vault_docs = _vault_docs(n_vault)
         umap_reducer = MagicMock() if with_umap else None
         if with_umap:
-            umap_reducer.transform.return_value = np.random.rand(2, 2).astype(
+            umap_reducer.transform.return_value = np.random.rand(n_entries, 2).astype(
                 np.float32
             )
 
@@ -116,6 +97,7 @@ class TestWriteScoreViz:
             umap_reducer=umap_reducer,
             threshold=0.5,
             output_path=out,
+            vault_bg_max=vault_bg_max,
         )
         return out
 
@@ -131,8 +113,8 @@ class TestWriteScoreViz:
     def test_html_contains_article_titles(self, tmp_path):
         out = self._basic_call(tmp_path)
         html = out.read_text()
-        assert "Kept Article" in html
-        assert "Rejected Article" in html
+        assert "Article 0" in html
+        assert "Article 1" in html
 
     def test_html_contains_threshold(self, tmp_path):
         out = self._basic_call(tmp_path)
@@ -177,3 +159,25 @@ class TestWriteScoreViz:
             output_path=nested,
         )
         assert nested.exists()
+
+    def test_no_histogram_panel(self, tmp_path):
+        """Panel 1 (histogram/KDE) must not appear in the output."""
+        out = self._basic_call(tmp_path)
+        html = out.read_text()
+        assert '"type": "histogram"' not in html
+        assert "Score Distribution" not in html
+
+    def test_rss_only_umap_panel_present(self, tmp_path):
+        """Panel 3 annotation for RSS-only UMAP should appear with ≥2 entries."""
+        out = self._basic_call(tmp_path, n_entries=4)
+        html = out.read_text()
+        assert "RSS entries only" in html
+
+    def test_vault_background_subsampled(self, tmp_path):
+        """When vault is larger than vault_bg_max the file is still produced."""
+        out = self._basic_call(tmp_path, n_vault=600, vault_bg_max=50)
+        assert out.exists()
+        # The HTML should not contain all 600 vault docs — hard to count exactly,
+        # but the file must exist and be non-trivial.
+        html = out.read_text()
+        assert "Plotly.newPlot" in html

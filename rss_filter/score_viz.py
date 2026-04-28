@@ -1,18 +1,18 @@
-"""Interactive score visualisation: histogram, scatter, and UMAP panel.
+"""Interactive score visualisation: scatter and UMAP panels.
 
 Generates a self-contained HTML file (Plotly.js via CDN) with three panels:
-  1. Score distribution histogram + KDE with threshold line
-  2. Scatter plot: aggregated score vs top-1 similarity, kept/rejected coloured
-  3. UMAP 2-D projection of new entries (foreground) + vault (background)
+  1. Scatter plot: aggregated score vs top-1 similarity, kept/rejected coloured
+  2. UMAP 2-D projection of new entries (foreground) + vault background (subsampled)
+  3. UMAP 2-D projection fitted on RSS entries only (no vault background)
 
-UMAP is fitted on vault embeddings (Matryoshka 128-dim) and the fitted model
-is cached to disk so daily runs only need to *transform* new entries.
+UMAP for panel 2 is fitted on vault embeddings (Matryoshka 128-dim) and the
+fitted model is cached to disk so daily runs only need to *transform* new entries.
+UMAP for panel 3 is fitted fresh on each run directly from the RSS batch.
 """
 
 from __future__ import annotations
 
 import json
-import math
 from datetime import date
 from pathlib import Path
 
@@ -128,30 +128,6 @@ def build_or_load_umap(
 
 
 # ---------------------------------------------------------------------------
-# KDE helper (pure numpy, no scipy dependency)
-# ---------------------------------------------------------------------------
-
-
-def _kde(values: np.ndarray, n_points: int = 200) -> tuple[list[float], list[float]]:
-    """Gaussian KDE using Silverman's rule of thumb bandwidth."""
-    n = len(values)
-    if n < 2:
-        return [], []
-    std = float(np.std(values))
-    if std == 0:
-        return [], []
-    bw = 1.06 * std * n ** (-0.2)
-    x = np.linspace(
-        float(values.min()) - 2 * bw, float(values.max()) + 2 * bw, n_points
-    )
-    kde_y = np.zeros(n_points)
-    for v in values:
-        kde_y += np.exp(-0.5 * ((x - v) / bw) ** 2)
-    kde_y /= n * bw * math.sqrt(2 * math.pi)
-    return x.tolist(), kde_y.tolist()
-
-
-# ---------------------------------------------------------------------------
 # HTML generation
 # ---------------------------------------------------------------------------
 
@@ -190,13 +166,18 @@ def write_score_viz(
     umap_reducer,
     threshold: float,
     output_path: Path,
+    vault_bg_max: int = 500,
 ) -> None:
     """Write a self-contained interactive HTML visualisation.
 
     Three panels:
-      1. Score distribution histogram + KDE + threshold line
-      2. Scatter: aggregated score vs top-1 similarity (kept/rejected)
-      3. UMAP 2-D projection: vault background + new entries foreground
+      1. Scatter: aggregated score vs top-1 similarity (kept/rejected)
+      2. UMAP 2-D projection: vault background (subsampled) + new entries foreground
+      3. UMAP 2-D projection fitted on RSS entries only (no vault background)
+
+    Args:
+        vault_bg_max: Maximum number of vault background points shown in panel 2.
+                      If the vault is larger a random subsample is drawn (seed=42).
     """
     if not results:
         print("  No entries to visualise — skipping HTML output.")
@@ -207,65 +188,13 @@ def write_score_viz(
         [m["exemplars"][0]["score"] if m["exemplars"] else 0.0 for m in entry_metadata]
     )
     kept_mask = np.array([r.keep for r in results])
-    titles = [r.entry.title for r in results]
     hovers = [_build_hover(r, m) for r, m in zip(results, entry_metadata)]
 
     kept_colour = "#2ecc71"
     rejected_colour = "#bdc3c7"
 
-    # --- Panel 1: histogram + KDE ---
-    kept_scores = scores[kept_mask].tolist()
-    rej_scores = scores[~kept_mask].tolist()
-    kde_x, kde_y = _kde(scores)
-    # Scale KDE to histogram counts for overlay.
-    n_bins = min(30, max(5, len(scores) // 5))
-
-    # --- Panel 3: UMAP transform of new entries ---
-    umap_xy: np.ndarray | None = None
-    if umap_reducer is not None and len(entry_metadata) > 0:
-        new_matrix = np.stack(
-            [m["embedding_128"] for m in entry_metadata], axis=0
-        ).astype(np.float32)
-        try:
-            umap_xy = umap_reducer.transform(new_matrix).astype(np.float32)
-        except Exception as e:
-            print(f"  [WARN] UMAP transform failed: {e}")
-            umap_xy = None
-
-    # --- Build Plotly traces as JSON-serialisable dicts ---
-
-    # Panel 1 traces
-    p1_hist_kept = {
-        "type": "histogram",
-        "x": kept_scores,
-        "name": "Kept",
-        "marker": {"color": kept_colour, "opacity": 0.7},
-        "nbinsx": n_bins,
-        "xaxis": "x1",
-        "yaxis": "y1",
-    }
-    p1_hist_rej = {
-        "type": "histogram",
-        "x": rej_scores,
-        "name": "Rejected",
-        "marker": {"color": rejected_colour, "opacity": 0.7},
-        "nbinsx": n_bins,
-        "xaxis": "x1",
-        "yaxis": "y1",
-    }
-    p1_kde = {
-        "type": "scatter",
-        "x": kde_x,
-        "y": kde_y,
-        "name": "KDE",
-        "mode": "lines",
-        "line": {"color": "#2980b9", "width": 2},
-        "xaxis": "x1",
-        "yaxis": "y2",
-    }
-
-    # Panel 2 traces
-    def _scatter(mask: np.ndarray, name: str, colour: str) -> dict:
+    # --- Panel 1: score vs top-1 similarity scatter ---
+    def _scatter(mask: np.ndarray, name: str, colour: str, xax: str, yax: str) -> dict:
         idx = np.where(mask)[0].tolist()
         return {
             "type": "scatter",
@@ -276,38 +205,64 @@ def write_score_viz(
             "marker": {"color": colour, "size": 8, "opacity": 0.8},
             "text": [hovers[i] for i in idx],
             "hovertemplate": "%{text}<extra></extra>",
-            "xaxis": "x3",
-            "yaxis": "y3",
+            "xaxis": xax,
+            "yaxis": yax,
         }
 
-    p2_kept = _scatter(kept_mask, "Kept", kept_colour)
-    p2_rej = _scatter(~kept_mask, "Rejected", rejected_colour)
+    p1_kept = _scatter(kept_mask, "Kept", kept_colour, "x1", "y1")
+    p1_rej = _scatter(~kept_mask, "Rejected", rejected_colour, "x1", "y1")
 
-    # Panel 3 traces
-    p3_traces: list[dict] = []
-    if vault_2d is not None and len(vault_2d) > 0:
+    # --- Panel 2: UMAP vault-fitted projection ---
+
+    # Subsample vault background
+    vault_2d_bg = vault_2d
+    vault_docs_bg = vault_docs
+    if len(vault_2d) > vault_bg_max:
+        rng = np.random.default_rng(seed=42)
+        idx_bg = rng.choice(len(vault_2d), vault_bg_max, replace=False)
+        idx_bg.sort()
+        vault_2d_bg = vault_2d[idx_bg]
+        vault_docs_bg = [vault_docs[i] for i in idx_bg]
+
+    # Transform new entries with the vault-fitted UMAP
+    umap_xy: np.ndarray | None = None
+    new_matrix: np.ndarray | None = None
+    if len(entry_metadata) >= 2:
+        new_matrix = np.stack(
+            [m["embedding_128"] for m in entry_metadata], axis=0
+        ).astype(np.float32)
+        if umap_reducer is not None:
+            try:
+                umap_xy = umap_reducer.transform(new_matrix).astype(np.float32)
+            except Exception as e:
+                print(f"  [WARN] UMAP transform failed: {e}")
+                umap_xy = None
+
+    p2_traces: list[dict] = []
+    if vault_2d_bg is not None and len(vault_2d_bg) > 0:
         vault_hover = [
             f"<b>{_truncate(d['text'], 100)}</b><br>Source: {d['source_note']}"
-            for d in vault_docs
+            for d in vault_docs_bg
         ]
-        p3_vault = {
-            "type": "scatter",
-            "x": vault_2d[:, 0].tolist(),
-            "y": vault_2d[:, 1].tolist(),
-            "mode": "markers",
-            "name": "Vault",
-            "marker": {
-                "color": "#ecf0f1",
-                "size": 4,
-                "opacity": 0.5,
-                "line": {"color": "#95a5a6", "width": 0.5},
-            },
-            "text": vault_hover,
-            "hovertemplate": "%{text}<extra></extra>",
-            "xaxis": "x5",
-            "yaxis": "y5",
-        }
-        p3_traces.append(p3_vault)
+        p2_traces.append(
+            {
+                "type": "scatter",
+                "x": vault_2d_bg[:, 0].tolist(),
+                "y": vault_2d_bg[:, 1].tolist(),
+                "mode": "markers",
+                "name": "Vault",
+                "marker": {
+                    "color": "#ecf0f1",
+                    "size": 4,
+                    "opacity": 0.5,
+                    "line": {"color": "#95a5a6", "width": 0.5},
+                },
+                "text": vault_hover,
+                "hovertemplate": "%{text}<extra></extra>",
+                "xaxis": "x3",
+                "yaxis": "y3",
+            }
+        )
 
     if umap_xy is not None:
 
@@ -319,6 +274,7 @@ def write_score_viz(
                 "y": umap_xy[mask, 1].tolist(),
                 "mode": "markers",
                 "name": name,
+                "showlegend": False,
                 "marker": {
                     "color": colour,
                     "size": 10,
@@ -327,14 +283,48 @@ def write_score_viz(
                 },
                 "text": [hovers[i] for i in idx],
                 "hovertemplate": "%{text}<extra></extra>",
-                "xaxis": "x5",
-                "yaxis": "y5",
+                "xaxis": "x3",
+                "yaxis": "y3",
             }
 
-        p3_traces.append(_umap_scatter(kept_mask, "Kept", kept_colour))
-        p3_traces.append(_umap_scatter(~kept_mask, "Rejected", rejected_colour))
+        p2_traces.append(_umap_scatter(kept_mask, "Kept", kept_colour))
+        p2_traces.append(_umap_scatter(~kept_mask, "Rejected", rejected_colour))
 
-    all_traces = [p1_hist_kept, p1_hist_rej, p1_kde, p2_kept, p2_rej] + p3_traces
+    # --- Panel 3: UMAP fitted on RSS entries only ---
+    p3_traces: list[dict] = []
+    if new_matrix is not None and len(new_matrix) >= 2:
+        try:
+            print("  Fitting UMAP on RSS entries only…")
+            rss_reducer = umap.UMAP(**_UMAP_PARAMS)
+            rss_2d = rss_reducer.fit_transform(new_matrix).astype(np.float32)
+
+            def _rss_scatter(mask: np.ndarray, name: str, colour: str) -> dict:
+                idx = np.where(mask)[0].tolist()
+                return {
+                    "type": "scatter",
+                    "x": rss_2d[mask, 0].tolist(),
+                    "y": rss_2d[mask, 1].tolist(),
+                    "mode": "markers",
+                    "name": name,
+                    "showlegend": False,
+                    "marker": {
+                        "color": colour,
+                        "size": 10,
+                        "opacity": 0.9,
+                        "line": {"color": "white", "width": 1},
+                    },
+                    "text": [hovers[i] for i in idx],
+                    "hovertemplate": "%{text}<extra></extra>",
+                    "xaxis": "x5",
+                    "yaxis": "y5",
+                }
+
+            p3_traces.append(_rss_scatter(kept_mask, "Kept", kept_colour))
+            p3_traces.append(_rss_scatter(~kept_mask, "Rejected", rejected_colour))
+        except Exception as e:
+            print(f"  [WARN] RSS-only UMAP failed: {e}")
+
+    all_traces = [p1_kept, p1_rej] + p2_traces + p3_traces
     traces_json = json.dumps(all_traces)
 
     today = date.today().isoformat()
@@ -343,25 +333,16 @@ def write_score_viz(
 
     layout = {
         "title": {"text": f"RSS Score Analysis — {today} ({n_kept}/{n_total} kept)"},
-        "barmode": "overlay",
         "hovermode": "closest",
-        # Panel 1: left third
-        "xaxis": {"domain": [0.0, 0.30], "title": "Aggregated score", "anchor": "y1"},
-        "yaxis": {"domain": [0.0, 1.0], "title": "Count", "anchor": "x1"},
-        "xaxis2": {"domain": [0.0, 0.30], "anchor": "y2", "overlaying": "x1"},
-        "yaxis2": {
-            "domain": [0.0, 1.0],
-            "title": "Density",
-            "anchor": "x2",
-            "overlaying": "y1",
-            "side": "right",
-        },
-        # Panel 2: middle third
-        "xaxis3": {"domain": [0.37, 0.63], "title": "Aggregated score", "anchor": "y3"},
-        "yaxis3": {"domain": [0.0, 1.0], "title": "Top-1 similarity", "anchor": "x3"},
-        # Panel 3: right third
+        # Panel 1: left third — score vs top-1 scatter
+        "xaxis": {"domain": [0.00, 0.30], "title": "Aggregated score", "anchor": "y1"},
+        "yaxis": {"domain": [0.00, 1.00], "title": "Top-1 similarity", "anchor": "x1"},
+        # Panel 2: middle third — vault-fitted UMAP
+        "xaxis3": {"domain": [0.37, 0.63], "title": "UMAP dim 1", "anchor": "y3"},
+        "yaxis3": {"domain": [0.00, 1.00], "title": "UMAP dim 2", "anchor": "x3"},
+        # Panel 3: right third — RSS-only UMAP
         "xaxis5": {"domain": [0.70, 1.00], "title": "UMAP dim 1", "anchor": "y5"},
-        "yaxis5": {"domain": [0.0, 1.0], "title": "UMAP dim 2", "anchor": "x5"},
+        "yaxis5": {"domain": [0.00, 1.00], "title": "UMAP dim 2", "anchor": "x5"},
         "legend": {"orientation": "h", "y": -0.05},
         "paper_bgcolor": "#1e1e2e",
         "plot_bgcolor": "#2a2a3e",
@@ -378,21 +359,10 @@ def write_score_viz(
                 "y1": 1,
                 "line": {"color": "#e74c3c", "width": 2, "dash": "dash"},
             },
-            # Threshold line on panel 2
-            {
-                "type": "line",
-                "xref": "x3",
-                "yref": "paper",
-                "x0": threshold,
-                "x1": threshold,
-                "y0": 0,
-                "y1": 1,
-                "line": {"color": "#e74c3c", "width": 2, "dash": "dash"},
-            },
         ],
         "annotations": [
             {
-                "text": "Score Distribution",
+                "text": "Score vs Top-1 Similarity",
                 "xref": "paper",
                 "yref": "paper",
                 "x": 0.15,
@@ -401,7 +371,7 @@ def write_score_viz(
                 "font": {"size": 13},
             },
             {
-                "text": "Score vs Top-1 Similarity",
+                "text": "UMAP — vault projection",
                 "xref": "paper",
                 "yref": "paper",
                 "x": 0.50,
@@ -410,7 +380,7 @@ def write_score_viz(
                 "font": {"size": 13},
             },
             {
-                "text": "UMAP Projection (128-dim Matryoshka)",
+                "text": "UMAP — RSS entries only",
                 "xref": "paper",
                 "yref": "paper",
                 "x": 0.85,

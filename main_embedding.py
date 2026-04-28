@@ -139,6 +139,16 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Force refit of the UMAP model on vault embeddings",
     )
+    parser.add_argument(
+        "--vault-bg-max",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Maximum number of vault background points shown in the UMAP panel "
+            "(default: from config, fallback 500)."
+        ),
+    )
     # --- Shared flags ---
     parser.add_argument(
         "--no-seen-filter",
@@ -175,6 +185,7 @@ def main(argv: list[str] | None = None) -> None:
     decay_lambda = args.decay_lambda or emb_cfg.get("decay_lambda", 1.0)
     umap_model_path = emb_cfg.get("umap_model_path", "umap_model.joblib")
     umap_growth_threshold = emb_cfg.get("umap_growth_threshold", 0.1)
+    vault_bg_max = args.vault_bg_max or emb_cfg.get("vault_bg_max", 500)
 
     seen_path = Path(path_cfg["seen_entries"])
 
@@ -373,6 +384,7 @@ def main(argv: list[str] | None = None) -> None:
                 umap_reducer=umap_reducer,
                 threshold=threshold_reading,
                 output_path=viz_path,
+                vault_bg_max=vault_bg_max,
             )
         except Exception as e:
             tqdm.write(f"  [WARN] Visualisation failed: {e}")
