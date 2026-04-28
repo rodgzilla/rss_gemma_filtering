@@ -42,15 +42,11 @@ def _format_exemplars(exemplars: list[dict]) -> str:
 
 def build_filter_prompt(
     entries_with_exemplars: list[dict],
-    summary_chars: int = 300,
 ) -> str:
-    """Build a batched few-shot filtering prompt.
+    """Build a batched few-shot filtering prompt using article titles only.
 
     *entries_with_exemplars* is a list of dicts:
         {"entry": RSSEntry, "exemplars": list[{"text", "url", "score"}]}
-
-    *summary_chars* limits how many characters of each article summary are
-    included in the prompt to avoid exceeding the model's context window.
     """
     parts: list[str] = []
     for idx, item in enumerate(entries_with_exemplars, start=1):
@@ -58,19 +54,11 @@ def build_filter_prompt(
         exemplars: list[dict] = item["exemplars"]
 
         exemplar_block = _format_exemplars(exemplars)
-        full_summary = (entry.summary or "").strip()
-        summary_block = (
-            full_summary[:summary_chars] + "…"
-            if len(full_summary) > summary_chars
-            else full_summary
-        )
 
         part = (
             f'{idx}. Article title: "{entry.title}"\n'
             f"   Most similar articles previously found relevant:\n"
-            f"{exemplar_block}\n"
-            f"   If the title alone is not sufficient, here is the article summary:\n"
-            f"   {summary_block}"
+            f"{exemplar_block}"
         )
         parts.append(part)
 
@@ -124,22 +112,24 @@ def filter_entries_batch(
     llm_client: OpenAI,
     model: str,
     top_k: int = 3,
-    batch_size: int = 10,
+    batch_size: int = 50,
     temperature: float = 0.1,
-    summary_chars: int = 300,
 ) -> list[FilterResult]:
     """Filter RSS entries using embedding-based few-shot exemplars.
 
     For each entry:
-    1. Embed ``title + " " + summary``.
+    1. Embed ``title + " " + summary`` (summary used only for the embedding
+       similarity search, not shown to the LLM).
     2. Retrieve the *top_k* most similar stored vault articles as exemplars.
-    3. Build a batched prompt and call Gemma-4 for the batch.
+    3. Build a batched prompt (titles + exemplar titles only) and call Gemma-4.
     4. Parse the response into FilterResult objects.
 
-    *batch_size* controls how many articles are sent per LLM call. Lower values
-    reduce the risk of exceeding the model's context window.
-    *summary_chars* limits how many characters of each article summary are
-    included in the prompt.
+    Batching: *batch_size* articles are grouped into a single LLM API call.
+    The prompt lists them numbered 1–N and the model replies with one
+    ``yes/no: reason`` line per number. This reduces API round-trips from
+    len(entries) down to ceil(len(entries) / batch_size). Title-only prompts
+    are short, so a large batch_size (default 50) is safe within any normal
+    context window.
 
     Input order is preserved in the returned list.
     """
@@ -166,7 +156,7 @@ def filter_entries_batch(
 
     for batch in tqdm(batches, desc="Filtering batches"):
         batch_entries = [item["entry"] for item in batch]
-        prompt = build_filter_prompt(batch, summary_chars=summary_chars)
+        prompt = build_filter_prompt(batch)
         response = llm_client.chat.completions.create(
             model=model,
             temperature=temperature,

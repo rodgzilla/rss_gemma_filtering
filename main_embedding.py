@@ -74,19 +74,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=10,
+        default=50,
         metavar="N",
-        help="Number of entries per LLM filtering call (default: 10)",
-    )
-    parser.add_argument(
-        "--summary-chars",
-        type=int,
-        default=300,
-        metavar="N",
-        help=(
-            "Maximum characters of article summary included in the prompt "
-            "(default: 300). Reduce if hitting context length errors."
-        ),
+        help="Number of entries per LLM filtering call (default: 50)",
     )
     parser.add_argument(
         "--rerank",
@@ -187,8 +177,7 @@ def main(argv: list[str] | None = None) -> None:
 
     print(
         f"  Filtering {len(all_entries)} entries with embedding few-shot approach "
-        f"(batch size: {args.batch_size}, top_k exemplars: {top_k}, "
-        f"summary chars: {args.summary_chars})…"
+        f"(batch size: {args.batch_size}, top_k exemplars: {top_k})…"
     )
 
     try:
@@ -201,7 +190,6 @@ def main(argv: list[str] | None = None) -> None:
             top_k=top_k,
             batch_size=args.batch_size,
             temperature=temperature,
-            summary_chars=args.summary_chars,
         )
     except Exception as e:
         tqdm.write(f"  [ERROR] Filtering failed: {e}")

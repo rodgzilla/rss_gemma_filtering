@@ -84,12 +84,12 @@ class TestBuildFilterPrompt:
         assert "Past Article" in prompt
         assert "0.87" in prompt
 
-    def test_summary_included_as_fallback(self):
+    def test_summary_not_included_in_prompt(self):
         entry = _entry("Title", summary="This is the article summary.")
         items = [{"entry": entry, "exemplars": []}]
         prompt = build_filter_prompt(items)
 
-        assert "This is the article summary." in prompt
+        assert "This is the article summary." not in prompt
 
     def test_no_exemplars_shows_placeholder(self):
         items = [{"entry": _entry("Title"), "exemplars": []}]
