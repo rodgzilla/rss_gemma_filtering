@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 import tomllib
 from datetime import date
 from pathlib import Path
@@ -25,6 +24,8 @@ from rss_filter.rss_fetcher import (
     parse_opml,
     save_seen_guids,
 )
+from rss_filter.score_filter import score_entries
+from rss_filter.score_viz import build_or_load_umap, write_score_viz
 
 
 def load_config(config_path: Path) -> dict:
@@ -36,7 +37,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Filter RSS feeds using embedding-based few-shot exemplars "
-            "and a local LLM (Gemma-4 via LM Studio)."
+            "and a local LLM (Gemma-4 via LM Studio), or via embedding "
+            "scores alone with --embedding-only."
         )
     )
     parser.add_argument(
@@ -71,6 +73,15 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Force a full rebuild of the embedding database from vault notes",
     )
+    # --- LLM filtering flags (ignored when --embedding-only is set) ---
+    parser.add_argument(
+        "--embedding-only",
+        action="store_true",
+        help=(
+            "Skip LLM filtering entirely. Use exponential decay score aggregation "
+            "over embedding similarities and keep only the top quantile of entries."
+        ),
+    )
     parser.add_argument(
         "--batch-size",
         type=int,
@@ -81,7 +92,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--rerank",
         action="store_true",
-        help="Re-rank kept entries by relevance score before writing the note",
+        help="Re-rank kept entries by relevance score before writing the note (LLM mode only)",
     )
     parser.add_argument(
         "--rerank-batch-size",
@@ -90,6 +101,34 @@ def main(argv: list[str] | None = None) -> None:
         metavar="N",
         help="Number of entries per re-ranking LLM call (default: 20)",
     )
+    # --- Embedding-only mode flags ---
+    parser.add_argument(
+        "--top-quantile",
+        type=float,
+        default=None,
+        metavar="Q",
+        help=(
+            "Fraction of top-scoring entries to keep in --embedding-only mode "
+            "(default: from config, fallback 0.25). E.g. 0.25 keeps the top 25%%."
+        ),
+    )
+    parser.add_argument(
+        "--decay-lambda",
+        type=float,
+        default=None,
+        metavar="L",
+        help=(
+            "Exponential decay parameter for score aggregation in --embedding-only "
+            "mode (default: from config, fallback 1.0). Higher values give more "
+            "weight to the single best exemplar match."
+        ),
+    )
+    parser.add_argument(
+        "--rebuild-umap",
+        action="store_true",
+        help="Force refit of the UMAP model on vault embeddings",
+    )
+    # --- Shared flags ---
     parser.add_argument(
         "--no-seen-filter",
         action="store_true",
@@ -109,11 +148,6 @@ def main(argv: list[str] | None = None) -> None:
     vault_cfg = cfg["vault"]
     emb_cfg = cfg.get("embedding", {})
 
-    # LLM client (Gemma-4 for filtering and re-ranking)
-    llm_client = OpenAI(base_url=lm_cfg["base_url"], api_key="lm-studio")
-    llm_model = lm_cfg["model"]
-    temperature = lm_cfg.get("temperature", 0.1)
-
     # Embedding client (small local embedding model)
     emb_base_url = emb_cfg.get("base_url", lm_cfg["base_url"])
     emb_model = emb_cfg.get("model", "text-embedding-embeddinggemma-300m-qat")
@@ -121,6 +155,12 @@ def main(argv: list[str] | None = None) -> None:
 
     store_path = emb_cfg.get("store_path", "embedding_store.db")
     top_k = emb_cfg.get("top_k", 3)
+
+    # Embedding-only parameters (CLI overrides config)
+    top_quantile = args.top_quantile or emb_cfg.get("top_quantile", 0.25)
+    decay_lambda = args.decay_lambda or emb_cfg.get("decay_lambda", 1.0)
+    umap_model_path = emb_cfg.get("umap_model_path", "umap_model.joblib")
+    umap_growth_threshold = emb_cfg.get("umap_growth_threshold", 0.1)
 
     seen_path = Path(path_cfg["seen_entries"])
 
@@ -172,84 +212,118 @@ def main(argv: list[str] | None = None) -> None:
         store.close()
         return
 
-    # --- Step 3: Embedding filter ---
     new_guids = {e.guid for e in all_entries}
 
-    print(
-        f"  Filtering {len(all_entries)} entries with embedding few-shot approach "
-        f"(batch size: {args.batch_size}, top_k exemplars: {top_k})…"
-    )
+    # --- Step 3: Filter ---
+    reading_results = []
+    arxiv_results = []
+    entry_metadata: list[dict] = []
+    threshold: float = 0.0
 
-    try:
-        all_results = filter_entries_batch(
+    if args.embedding_only:
+        # -----------------------------------------------------------------
+        # Embedding-only path: score aggregation + quantile threshold
+        # -----------------------------------------------------------------
+        print(
+            f"\n  [Embedding-only] Scoring {len(all_entries)} entries "
+            f"(top_quantile={top_quantile}, decay_lambda={decay_lambda}, "
+            f"top_k={top_k})…"
+        )
+        all_results, entry_metadata, threshold = score_entries(
             all_entries,
             store=store,
             embed_client=embed_client,
-            llm_client=llm_client,
-            model=llm_model,
             top_k=top_k,
-            batch_size=args.batch_size,
-            temperature=temperature,
+            decay_lambda=decay_lambda,
+            top_quantile=top_quantile,
         )
-    except Exception as e:
-        tqdm.write(f"  [ERROR] Filtering failed: {e}")
-        all_results = []
 
-    reading_results = []
-    arxiv_results = []
-    for result in all_results:
-        if result.keep:
-            if result.entry.is_arxiv:
-                arxiv_results.append(result)
-            else:
-                reading_results.append(result)
+        for result in all_results:
+            if result.keep:
+                if result.entry.is_arxiv:
+                    arxiv_results.append(result)
+                else:
+                    reading_results.append(result)
+
+    else:
+        # -----------------------------------------------------------------
+        # LLM few-shot path (default)
+        # -----------------------------------------------------------------
+        # LLM client only needed in this branch
+        llm_client = OpenAI(base_url=lm_cfg["base_url"], api_key="lm-studio")
+        llm_model = lm_cfg["model"]
+        temperature = lm_cfg.get("temperature", 0.1)
+
+        print(
+            f"\n  [LLM] Filtering {len(all_entries)} entries "
+            f"(batch size: {args.batch_size}, top_k exemplars: {top_k})…"
+        )
+        try:
+            all_results = filter_entries_batch(
+                all_entries,
+                store=store,
+                embed_client=embed_client,
+                llm_client=llm_client,
+                model=llm_model,
+                top_k=top_k,
+                batch_size=args.batch_size,
+                temperature=temperature,
+            )
+        except Exception as e:
+            tqdm.write(f"  [ERROR] Filtering failed: {e}")
+            all_results = []
+
+        for result in all_results:
+            if result.keep:
+                if result.entry.is_arxiv:
+                    arxiv_results.append(result)
+                else:
+                    reading_results.append(result)
+
+        # Optional re-ranking (LLM mode only)
+        kept = len(reading_results) + len(arxiv_results)
+        if args.rerank and kept > 0:
+            profile_placeholder = ""
+            print(
+                f"  Re-ranking {len(reading_results)} reading + "
+                f"{len(arxiv_results)} arxiv entries…"
+            )
+            if reading_results:
+                reading_results = rerank(
+                    reading_results,
+                    profile_placeholder,
+                    llm_client,
+                    model=llm_model,
+                    temperature=temperature,
+                    batch_size=args.rerank_batch_size,
+                )
+            if arxiv_results:
+                arxiv_results = rerank(
+                    arxiv_results,
+                    profile_placeholder,
+                    llm_client,
+                    model=llm_model,
+                    temperature=temperature,
+                    batch_size=args.rerank_batch_size,
+                )
 
     kept = len(reading_results) + len(arxiv_results)
     print(f"  Kept {kept} / {len(all_entries)} entries.")
 
-    # --- Step 4: Re-rank (optional) ---
-    if args.rerank and kept > 0:
-        # Re-ranking uses the interest profile; we pass a placeholder since reranker
-        # expects a profile string. Build a minimal one from exemplar texts if needed.
-        # For now we pass an empty string — the reranker prompt is self-contained.
-        profile_placeholder = ""
-        print(
-            f"  Re-ranking {len(reading_results)} reading + "
-            f"{len(arxiv_results)} arxiv entries…"
-        )
-        if reading_results:
-            reading_results = rerank(
-                reading_results,
-                profile_placeholder,
-                llm_client,
-                model=llm_model,
-                temperature=temperature,
-                batch_size=args.rerank_batch_size,
-            )
-        if arxiv_results:
-            arxiv_results = rerank(
-                arxiv_results,
-                profile_placeholder,
-                llm_client,
-                model=llm_model,
-                temperature=temperature,
-                batch_size=args.rerank_batch_size,
-            )
-
-    # --- Step 5: Output ---
+    # --- Step 4: Output ---
     today = date.today().isoformat()
 
     if args.dry_run:
         if reading_results:
             print("\n## Reading\n")
             for r in reading_results:
-                score_str = f"  [score: {r.score:.1f}]" if r.score is not None else ""
+                score_str = f"  [score: {r.score:.4f}]" if r.score is not None else ""
                 print(f"- [{r.entry.title}]({r.entry.url}){score_str}")
                 print(f"  > {r.reason}")
         if arxiv_results:
             print("\n## Arxiv monitoring\n")
             for r in arxiv_results:
-                score_str = f"  [score: {r.score:.1f}]" if r.score is not None else ""
+                score_str = f"  [score: {r.score:.4f}]" if r.score is not None else ""
                 print(f"- [{r.entry.title}]({r.entry.url}){score_str}")
                 print(f"  > {r.reason}")
     else:
@@ -259,6 +333,31 @@ def main(argv: list[str] | None = None) -> None:
             print(f"\nNote written to: {output}")
         else:
             print("\nNo relevant entries found. No note written.")
+
+    # --- Step 5: Visualisation (embedding-only mode only) ---
+    if args.embedding_only and entry_metadata and not args.dry_run:
+        print("\n  Building score visualisation…")
+        try:
+            umap_reducer, vault_2d, vault_docs = build_or_load_umap(
+                store=store,
+                model_path=umap_model_path,
+                force_rebuild=args.rebuild_umap or args.rebuild_embeddings,
+                growth_threshold=umap_growth_threshold,
+            )
+            viz_path = (
+                args.vault / vault_cfg["output_folder"] / f"RSS-{today}-scores.html"
+            )
+            write_score_viz(
+                results=all_results,
+                entry_metadata=entry_metadata,
+                vault_2d=vault_2d,
+                vault_docs=vault_docs,
+                umap_reducer=umap_reducer,
+                threshold=threshold,
+                output_path=viz_path,
+            )
+        except Exception as e:
+            tqdm.write(f"  [WARN] Visualisation failed: {e}")
 
     # --- Persist seen GUIDs ---
     if not args.dry_run and not args.no_seen_filter:

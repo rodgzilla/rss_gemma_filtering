@@ -3,5 +3,7 @@ feedparser
 listparser
 tqdm
 numpy
+umap-learn
+joblib
 pytest
 pytest-mock

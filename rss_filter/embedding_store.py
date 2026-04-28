@@ -32,6 +32,7 @@ VALUES (?, ?, ?, ?, ?);
 _SELECT_EXISTING_KEYS = "SELECT url, source_note FROM documents;"
 
 _SELECT_ALL = "SELECT text, url, embedding FROM documents;"
+_SELECT_ALL_WITH_META = "SELECT url, text, source_note, date, embedding FROM documents;"
 
 _COUNT = "SELECT COUNT(*) FROM documents;"
 
@@ -158,6 +159,24 @@ class EmbeddingStore:
         """Return the number of documents in the store."""
         row = self._conn.execute(_COUNT).fetchone()
         return row[0] if row else 0
+
+    def get_all(self) -> list[dict]:
+        """Return all stored documents with their embeddings.
+
+        Each entry is a dict with keys:
+        ``url``, ``text``, ``source_note``, ``date``, ``embedding`` (np.ndarray float32).
+        """
+        rows = self._conn.execute(_SELECT_ALL_WITH_META).fetchall()
+        return [
+            {
+                "url": row[0],
+                "text": row[1],
+                "source_note": row[2],
+                "date": row[3],
+                "embedding": np.frombuffer(row[4], dtype=np.float32).copy(),
+            }
+            for row in rows
+        ]
 
     def close(self) -> None:
         """Close the underlying database connection."""

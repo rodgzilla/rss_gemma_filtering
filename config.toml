@@ -17,3 +17,8 @@ model = "text-embedding-embeddinggemma-300m-qat"
 base_url = "http://localhost:1234/v1"
 store_path = "embedding_store.db"
 top_k = 3
+# Embedding-only mode parameters
+top_quantile = 0.25       # keep the top 25% of entries by embedding score
+decay_lambda = 1.0        # exponential decay weight for score aggregation
+umap_model_path = "umap_model.joblib"
+umap_growth_threshold = 0.1   # refit UMAP when vault grows by >10%
