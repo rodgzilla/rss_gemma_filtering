@@ -149,6 +149,93 @@ def test_build_note_content_omits_empty_sections():
     assert "## Arxiv monitoring" not in content
 
 
+def test_build_note_content_has_yaml_frontmatter():
+    content = build_note_content([], [], date="2025-01-15")
+    assert content.startswith("---\n")
+    assert "tags:" in content
+
+
+def test_build_note_content_frontmatter_contains_rss_and_embedding_tags():
+    content = build_note_content([], [], date="2025-01-15")
+    assert "- rss" in content
+    assert "- embedding" in content
+
+
+def test_build_note_content_frontmatter_has_cssclasses_tracker():
+    content = build_note_content([], [], date="2025-01-15")
+    assert "cssclasses:" in content
+    assert "- tracker" in content
+
+
+def test_build_note_content_frontmatter_has_up_daily_note_link():
+    content = build_note_content([], [], date="2025-01-15")
+    assert "up:" in content
+    assert "[[2025-01-15]]" in content
+
+
+def test_build_note_content_frontmatter_closes_before_heading():
+    """The closing --- must appear before the # heading."""
+    content = build_note_content([], [], date="2025-01-15")
+    close_pos = content.index("---\n", 1)  # second occurrence closes frontmatter
+    heading_pos = content.index("# RSS Digest")
+    assert close_pos < heading_pos
+
+
+def test_build_note_content_no_viz_block_when_viz_filename_not_given():
+    content = build_note_content([], [], date="2025-01-15")
+    assert "dataviewjs" not in content
+    assert "<iframe" not in content
+
+
+def test_build_note_content_includes_viz_block_when_viz_filename_given():
+    content = build_note_content(
+        [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    assert "dataviewjs" in content
+
+
+def test_build_note_content_viz_block_uses_getResourcePath():
+    """Block must use app.vault.getResourcePath for portable app:// resolution."""
+    content = build_note_content(
+        [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    assert "getResourcePath" in content
+    assert "getAbstractFileByPath" in content
+
+
+def test_build_note_content_viz_block_derives_filename_from_note_name():
+    """Filename must be derived from dv.current().file.name, not hardcoded."""
+    content = build_note_content(
+        [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    assert "dv.current().file.name" in content
+
+
+def test_build_note_content_viz_block_appears_before_content():
+    """DataviewJS viz block must come before the article sections."""
+    reading = [
+        FilterResult(
+            entry=RSSEntry(
+                title="Some Article",
+                url="http://x.com",
+                summary="s",
+                feed_name="F",
+                is_arxiv=False,
+                guid="g1",
+            ),
+            keep=True,
+            reason="ok",
+            score=0.9,
+        )
+    ]
+    content = build_note_content(
+        reading, [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    viz_pos = content.index("dataviewjs")
+    heading_pos = content.index("## Reading")
+    assert viz_pos < heading_pos
+
+
 # ---------------------------------------------------------------------------
 # write_note
 # ---------------------------------------------------------------------------
@@ -191,3 +278,26 @@ def test_write_note_file_contains_correct_content(tmp_path):
     assert "Cool Blog" in content
     assert "https://cool.com" in content
     assert "Cool tech article" in content
+
+
+def test_write_note_passes_viz_filename_to_content(tmp_path):
+    reading = [_make_result("Blog", "https://blog.com", is_arxiv=False)]
+    write_note(
+        tmp_path,
+        reading,
+        [],
+        date="2025-01-15",
+        viz_filename="RSS-2025-01-15-scores.html",
+    )
+
+    content = (tmp_path / "Filtered feed" / "RSS-2025-01-15.md").read_text()
+    assert "dataviewjs" in content
+    assert "dv.current().file.name" in content
+
+
+def test_write_note_no_viz_block_without_viz_filename(tmp_path):
+    reading = [_make_result("Blog", "https://blog.com", is_arxiv=False)]
+    write_note(tmp_path, reading, [], date="2025-01-15")
+
+    content = (tmp_path / "Filtered feed" / "RSS-2025-01-15.md").read_text()
+    assert "dataviewjs" not in content
