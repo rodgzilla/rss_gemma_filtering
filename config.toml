@@ -22,3 +22,4 @@ top_quantile = 0.25       # keep the top 25% of entries by embedding score
 decay_lambda = 1.0        # exponential decay weight for score aggregation
 umap_model_path = "umap_model.joblib"
 umap_growth_threshold = 0.1   # refit UMAP when vault grows by >10%
+vault_bg_max = 500            # max vault background points shown in the UMAP panel
