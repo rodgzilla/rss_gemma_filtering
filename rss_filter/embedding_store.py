@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
 from rss_filter.embedding_client import EmbeddingClient
 from rss_filter.models import NoteEntry
@@ -88,7 +89,9 @@ class EmbeddingStore:
             return
 
         texts = [_embed_text_for_entry(e) for e in new_entries]
-        embeddings = _embed_in_chunks(client, texts, _EMBED_CHUNK_SIZE)
+        embeddings = _embed_in_chunks(
+            client, texts, _EMBED_CHUNK_SIZE, desc="Embedding vault"
+        )
 
         rows_to_insert = [
             (
@@ -195,11 +198,18 @@ class EmbeddingStore:
 
 
 def _embed_in_chunks(
-    client: EmbeddingClient, texts: list[str], chunk_size: int
+    client: EmbeddingClient,
+    texts: list[str],
+    chunk_size: int,
+    desc: str = "Embedding",
 ) -> list[np.ndarray]:
     """Embed *texts* using *client*, sending at most *chunk_size* per request."""
     results: list[np.ndarray] = []
-    for start in range(0, len(texts), chunk_size):
-        chunk = texts[start : start + chunk_size]
-        results.extend(client.embed_batch(chunk))
+    chunks = [
+        texts[start : start + chunk_size] for start in range(0, len(texts), chunk_size)
+    ]
+    with tqdm(total=len(texts), desc=desc, unit="doc") as pbar:
+        for chunk in chunks:
+            results.extend(client.embed_batch(chunk))
+            pbar.update(len(chunk))
     return results

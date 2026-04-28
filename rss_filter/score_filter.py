@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from tqdm import tqdm
 
 from rss_filter.embedding_client import EmbeddingClient
 from rss_filter.embedding_store import EmbeddingStore
@@ -64,14 +65,19 @@ def score_entries(
 
     # --- Step 1: embed all entries ---
     texts = [f"{e.title} {e.summary or ''}".strip() for e in entries]
-    print(f"Embedding {len(texts)} RSS entries...")
-    embeddings = embed_client.embed_batch(texts)
+    _SCORE_CHUNK = 64
+    embeddings: list[np.ndarray] = []
+    chunks = [texts[i : i + _SCORE_CHUNK] for i in range(0, len(texts), _SCORE_CHUNK)]
+    with tqdm(total=len(texts), desc="Embedding RSS entries", unit="entry") as pbar:
+        for chunk in chunks:
+            embeddings.extend(embed_client.embed_batch(chunk))
+            pbar.update(len(chunk))
 
     # --- Step 2 & 3: retrieve exemplars and compute aggregated scores ---
     agg_scores: list[float] = []
     entry_metadata: list[dict] = []
 
-    for emb in embeddings:
+    for emb in tqdm(embeddings, desc="Scoring entries", unit="entry"):
         exemplars = store.query(emb, top_k=top_k)
         sims = [ex["score"] for ex in exemplars]
         agg = _exponential_decay_score(sims, decay_lambda)
