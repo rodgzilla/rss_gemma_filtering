@@ -39,29 +39,39 @@ def score_entries(
     top_k: int = 3,
     decay_lambda: float = 1.0,
     top_quantile: float = 0.25,
-) -> tuple[list[FilterResult], list[dict], float]:
+    top_quantile_arxiv: float | None = None,
+) -> tuple[list[FilterResult], list[dict], float, float]:
     """Score RSS entries using embedding similarity and select the top quantile.
+
+    Two separate quantile thresholds are applied: one for general reading entries
+    and one for arXiv entries (``top_quantile_arxiv``).  If ``top_quantile_arxiv``
+    is *None* it falls back to the same value as ``top_quantile``.
 
     Pipeline:
     1. Embed each entry as ``title + " " + summary`` (summary aids the embedding
        similarity search but is never shown to any LLM).
     2. For each entry retrieve the *top_k* most similar vault documents.
     3. Aggregate the K similarity scores with exponential decay weighting.
-    4. Compute the score distribution over all entries and find the threshold
-       at the ``(1 - top_quantile)`` percentile.
-    5. Mark entries at or above the threshold as kept.
+    4. Compute separate score distributions for reading vs arXiv entries and
+       find their respective thresholds at the ``(1 - top_quantile*)`` percentile.
+    5. Mark entries at or above their category threshold as kept.
 
     Returns:
-        results:          list[FilterResult] — one per entry, keep/score/reason set
-        entry_metadata:   list[dict] — per-entry data for the visualisation:
-                          {"embedding": np.ndarray (full-dim),
-                           "embedding_128": np.ndarray (Matryoshka 128-dim),
-                           "exemplars": [{"text": str, "score": float}],
-                           "agg_score": float}
-        threshold:        float — the score threshold used
+        results:               list[FilterResult] — one per entry, keep/score/reason set
+        entry_metadata:        list[dict] — per-entry data for the visualisation:
+                               {"embedding": np.ndarray (full-dim),
+                                "embedding_128": np.ndarray (Matryoshka 128-dim),
+                                "exemplars": [{"text": str, "score": float}],
+                                "agg_score": float,
+                                "is_arxiv": bool}
+        threshold_reading:     float — the score threshold used for reading entries
+        threshold_arxiv:       float — the score threshold used for arXiv entries
     """
+    if top_quantile_arxiv is None:
+        top_quantile_arxiv = top_quantile
+
     if not entries:
-        return [], [], 0.0
+        return [], [], 0.0, 0.0
 
     # --- Step 1: embed all entries ---
     texts = [f"{e.title} {e.summary or ''}".strip() for e in entries]
@@ -77,7 +87,12 @@ def score_entries(
     agg_scores: list[float] = []
     entry_metadata: list[dict] = []
 
-    for emb in tqdm(embeddings, desc="Scoring entries", unit="entry"):
+    for entry, emb in tqdm(
+        zip(entries, embeddings),
+        desc="Scoring entries",
+        unit="entry",
+        total=len(entries),
+    ):
         exemplars = store.query(emb, top_k=top_k)
         sims = [ex["score"] for ex in exemplars]
         agg = _exponential_decay_score(sims, decay_lambda)
@@ -90,28 +105,55 @@ def score_entries(
                     {"text": ex["text"], "score": ex["score"]} for ex in exemplars
                 ],
                 "agg_score": agg,
+                "is_arxiv": entry.is_arxiv,
             }
         )
 
-    # --- Step 4: quantile threshold ---
-    scores_arr = np.array(agg_scores)
-    if len(scores_arr) == 1:
-        # Single entry: always keep it.
-        threshold = float(scores_arr[0])
-    else:
-        threshold = float(np.percentile(scores_arr, (1.0 - top_quantile) * 100))
+    # --- Step 4: per-category quantile thresholds ---
+    reading_scores = [s for e, s in zip(entries, agg_scores) if not e.is_arxiv]
+    arxiv_scores = [s for e, s in zip(entries, agg_scores) if e.is_arxiv]
+
+    def _threshold(scores: list[float], quantile: float) -> float:
+        arr = np.array(scores)
+        if len(arr) == 0:
+            return 0.0
+        if len(arr) == 1:
+            return float(arr[0])
+        return float(np.percentile(arr, (1.0 - quantile) * 100))
+
+    threshold_reading = _threshold(reading_scores, top_quantile)
+    threshold_arxiv = _threshold(arxiv_scores, top_quantile_arxiv)
 
     # --- Step 5: build FilterResult list ---
     results: list[FilterResult] = []
     for entry, agg, meta in zip(entries, agg_scores, entry_metadata):
-        keep = agg >= threshold
-        reason = f"embedding score {agg:.4f} (threshold {threshold:.4f})"
-        results.append(FilterResult(entry=entry, keep=keep, reason=reason, score=agg))
+        if entry.is_arxiv:
+            thr = threshold_arxiv
+        else:
+            thr = threshold_reading
+        keep = agg >= thr
+        reason = f"embedding score {agg:.4f} (threshold {thr:.4f})"
+        results.append(
+            FilterResult(
+                entry=entry,
+                keep=keep,
+                reason=reason,
+                score=agg,
+                exemplars=meta["exemplars"],
+            )
+        )
 
-    kept = sum(1 for r in results if r.keep)
+    kept_reading = sum(1 for r in results if r.keep and not r.entry.is_arxiv)
+    kept_arxiv = sum(1 for r in results if r.keep and r.entry.is_arxiv)
+    n_reading = len(reading_scores)
+    n_arxiv = len(arxiv_scores)
     print(
-        f"  Score threshold (top {top_quantile * 100:.0f}%): {threshold:.4f} — "
-        f"kept {kept} / {len(entries)} entries."
+        f"  Reading threshold  (top {top_quantile * 100:.0f}%): {threshold_reading:.4f}"
+        f" — kept {kept_reading} / {n_reading} entries."
+    )
+    print(
+        f"  Arxiv threshold    (top {top_quantile_arxiv * 100:.0f}%): {threshold_arxiv:.4f}"
+        f" — kept {kept_arxiv} / {n_arxiv} entries."
     )
 
-    return results, entry_metadata, threshold
+    return results, entry_metadata, threshold_reading, threshold_arxiv

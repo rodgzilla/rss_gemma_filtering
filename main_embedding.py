@@ -108,8 +108,19 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         metavar="Q",
         help=(
-            "Fraction of top-scoring entries to keep in --embedding-only mode "
+            "Fraction of top-scoring *reading* entries to keep in --embedding-only mode "
             "(default: from config, fallback 0.25). E.g. 0.25 keeps the top 25%%."
+        ),
+    )
+    parser.add_argument(
+        "--top-quantile-arxiv",
+        type=float,
+        default=None,
+        metavar="Q",
+        help=(
+            "Fraction of top-scoring *arXiv* entries to keep in --embedding-only mode "
+            "(default: from config key top_quantile_arxiv, fallback same as --top-quantile). "
+            "E.g. 0.50 keeps the top 50%%."
         ),
     )
     parser.add_argument(
@@ -158,6 +169,9 @@ def main(argv: list[str] | None = None) -> None:
 
     # Embedding-only parameters (CLI overrides config)
     top_quantile = args.top_quantile or emb_cfg.get("top_quantile", 0.25)
+    top_quantile_arxiv = args.top_quantile_arxiv or emb_cfg.get(
+        "top_quantile_arxiv", None
+    )
     decay_lambda = args.decay_lambda or emb_cfg.get("decay_lambda", 1.0)
     umap_model_path = emb_cfg.get("umap_model_path", "umap_model.joblib")
     umap_growth_threshold = emb_cfg.get("umap_growth_threshold", 0.1)
@@ -218,7 +232,8 @@ def main(argv: list[str] | None = None) -> None:
     reading_results = []
     arxiv_results = []
     entry_metadata: list[dict] = []
-    threshold: float = 0.0
+    threshold_reading: float = 0.0
+    threshold_arxiv: float = 0.0
 
     if args.embedding_only:
         # -----------------------------------------------------------------
@@ -226,16 +241,17 @@ def main(argv: list[str] | None = None) -> None:
         # -----------------------------------------------------------------
         print(
             f"\n  [Embedding-only] Scoring {len(all_entries)} entries "
-            f"(top_quantile={top_quantile}, decay_lambda={decay_lambda}, "
-            f"top_k={top_k})…"
+            f"(top_quantile={top_quantile}, top_quantile_arxiv={top_quantile_arxiv or top_quantile}, "
+            f"decay_lambda={decay_lambda}, top_k={top_k})…"
         )
-        all_results, entry_metadata, threshold = score_entries(
+        all_results, entry_metadata, threshold_reading, threshold_arxiv = score_entries(
             all_entries,
             store=store,
             embed_client=embed_client,
             top_k=top_k,
             decay_lambda=decay_lambda,
             top_quantile=top_quantile,
+            top_quantile_arxiv=top_quantile_arxiv,
         )
 
         for result in all_results:
@@ -319,13 +335,15 @@ def main(argv: list[str] | None = None) -> None:
             for r in reading_results:
                 score_str = f"  [score: {r.score:.4f}]" if r.score is not None else ""
                 print(f"- [{r.entry.title}]({r.entry.url}){score_str}")
-                print(f"  > {r.reason}")
+                for ex in r.exemplars:
+                    print(f"  - {ex['score']:.4f}  {ex['text']}")
         if arxiv_results:
             print("\n## Arxiv monitoring\n")
             for r in arxiv_results:
                 score_str = f"  [score: {r.score:.4f}]" if r.score is not None else ""
                 print(f"- [{r.entry.title}]({r.entry.url}){score_str}")
-                print(f"  > {r.reason}")
+                for ex in r.exemplars:
+                    print(f"  - {ex['score']:.4f}  {ex['text']}")
     else:
         write_note(args.vault, reading_results, arxiv_results, date=today)
         if kept > 0:
@@ -353,7 +371,7 @@ def main(argv: list[str] | None = None) -> None:
                 vault_2d=vault_2d,
                 vault_docs=vault_docs,
                 umap_reducer=umap_reducer,
-                threshold=threshold,
+                threshold=threshold_reading,
                 output_path=viz_path,
             )
         except Exception as e:

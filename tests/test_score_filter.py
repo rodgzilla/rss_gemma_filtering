@@ -93,33 +93,38 @@ class TestScoreEntries:
     def test_empty_input_returns_empty(self):
         embed_client = MagicMock()
         store = MagicMock()
-        results, meta, threshold = score_entries([], store, embed_client)
+        results, meta, threshold_reading, threshold_arxiv = score_entries(
+            [], store, embed_client
+        )
         assert results == []
         assert meta == []
-        assert threshold == 0.0
+        assert threshold_reading == 0.0
+        assert threshold_arxiv == 0.0
 
     def test_returns_correct_lengths(self):
         entries = [_entry("A"), _entry("B"), _entry("C")]
         embed_client, store = _make_mocks([[0.9, 0.8, 0.7]] * 3)
-        results, meta, threshold = score_entries(entries, store, embed_client, top_k=3)
+        results, meta, threshold_reading, threshold_arxiv = score_entries(
+            entries, store, embed_client, top_k=3
+        )
         assert len(results) == 3
         assert len(meta) == 3
 
     def test_scores_stored_in_filter_result(self):
         entries = [_entry("A")]
         embed_client, store = _make_mocks([[0.9, 0.8]])
-        results, meta, _ = score_entries(entries, store, embed_client, top_k=2)
+        results, meta, _, _ = score_entries(entries, store, embed_client, top_k=2)
         assert results[0].score is not None
         assert results[0].score == pytest.approx(meta[0]["agg_score"], abs=1e-6)
 
     def test_threshold_in_reason_string(self):
         entries = [_entry("A"), _entry("B")]
         embed_client, store = _make_mocks([[0.9], [0.3]])
-        results, _, threshold = score_entries(
+        results, _, threshold_reading, _ = score_entries(
             entries, store, embed_client, top_k=1, top_quantile=0.5
         )
         for r in results:
-            assert f"{threshold:.4f}" in r.reason
+            assert f"{threshold_reading:.4f}" in r.reason
 
     def test_quantile_keeps_top_fraction(self):
         # 4 entries; top_quantile=0.5 should keep the top 2.
@@ -127,7 +132,7 @@ class TestScoreEntries:
         # Give them clearly separated scores so ranking is unambiguous.
         scores_per = [[0.9], [0.8], [0.3], [0.2]]
         embed_client, store = _make_mocks(scores_per)
-        results, _, _ = score_entries(
+        results, _, _, _ = score_entries(
             entries, store, embed_client, top_k=1, top_quantile=0.5
         )
         kept = [r.keep for r in results]
@@ -141,7 +146,7 @@ class TestScoreEntries:
     def test_single_entry_always_kept(self):
         entries = [_entry("Solo")]
         embed_client, store = _make_mocks([[0.5]])
-        results, _, _ = score_entries(entries, store, embed_client, top_k=1)
+        results, _, _, _ = score_entries(entries, store, embed_client, top_k=1)
         assert results[0].keep is True
 
     def test_metadata_contains_embedding_128(self):
@@ -151,11 +156,11 @@ class TestScoreEntries:
         embed_client.embed_batch.return_value = [np.ones(embed_dim, dtype=np.float32)]
         store = MagicMock()
         store.query.return_value = [{"text": "x", "url": "u", "score": 0.8}]
-        _, meta, _ = score_entries(entries, store, embed_client, top_k=1)
+        _, meta, _, _ = score_entries(entries, store, embed_client, top_k=1)
         assert meta[0]["embedding_128"].shape == (128,)
 
     def test_input_order_preserved(self):
         entries = [_entry(f"E{i}") for i in range(5)]
         embed_client, store = _make_mocks([[0.5]] * 5)
-        results, _, _ = score_entries(entries, store, embed_client, top_k=1)
+        results, _, _, _ = score_entries(entries, store, embed_client, top_k=1)
         assert [r.entry for r in results] == entries
