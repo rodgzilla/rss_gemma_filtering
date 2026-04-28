@@ -26,6 +26,9 @@ _SYSTEM_PROMPT = (
 )
 
 
+_EXEMPLAR_CHARS = 120  # max characters shown per exemplar text
+
+
 def _format_exemplars(exemplars: list[dict]) -> str:
     """Format retrieved exemplars as a bullet list with similarity scores."""
     if not exemplars:
@@ -34,8 +37,10 @@ def _format_exemplars(exemplars: list[dict]) -> str:
     for ex in exemplars:
         score = ex["score"]
         text = ex["text"].strip()
-        # Use only the first line of the stored text (title / first sentence).
+        # Use only the first line, capped at _EXEMPLAR_CHARS characters.
         first_line = text.splitlines()[0] if text else ex["url"]
+        if len(first_line) > _EXEMPLAR_CHARS:
+            first_line = first_line[:_EXEMPLAR_CHARS] + "…"
         lines.append(f'  - "{first_line}" (similarity: {score:.2f})')
     return "\n".join(lines)
 
@@ -112,7 +117,7 @@ def filter_entries_batch(
     llm_client: OpenAI,
     model: str,
     top_k: int = 3,
-    batch_size: int = 50,
+    batch_size: int = 20,
     temperature: float = 0.1,
 ) -> list[FilterResult]:
     """Filter RSS entries using embedding-based few-shot exemplars.

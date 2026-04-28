@@ -74,9 +74,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=50,
+        default=20,
         metavar="N",
-        help="Number of entries per LLM filtering call (default: 50)",
+        help="Number of entries per LLM filtering call (default: 20)",
     )
     parser.add_argument(
         "--rerank",
