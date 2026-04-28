@@ -1,12 +1,5 @@
-[lmstudio]
-base_url = "http://localhost:1234/v1"
-# model = "google/gemma-4-e4b"
-model = "qwen/qwen3-1.7b"
-temperature = 0.1
-
 [paths]
 seen_entries = "seen_entries.json"
-interest_profile = "interest_profile.md"
 
 [vault]
 daily_notes_folder = "Daily notes"
@@ -17,9 +10,8 @@ model = "text-embedding-embeddinggemma-300m-qat"
 base_url = "http://localhost:1234/v1"
 store_path = "embedding_store.db"
 top_k = 3
-# Embedding-only mode parameters
-top_quantile = 0.20       # keep the top 25% of general reading entries by embedding score
-top_quantile_arxiv = 0.05 # keep the top 50% of arxiv entries by embedding score
+top_quantile = 0.20       # keep the top 20% of general reading entries by embedding score
+top_quantile_arxiv = 0.05 # keep the top 5% of arxiv entries by embedding score
 decay_lambda = 1.0        # exponential decay weight for score aggregation
 umap_model_path = "umap_model.joblib"
 umap_growth_threshold = 0.1   # refit UMAP when vault grows by >10%
