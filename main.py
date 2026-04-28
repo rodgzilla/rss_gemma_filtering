@@ -74,16 +74,16 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--prefilter-keywords",
         type=int,
-        default=60,
+        default=30,
         metavar="N",
-        help="Number of top keywords to extract from the profile for pre-filtering (default: 60)",
+        help="Number of top keywords to extract from the profile for pre-filtering (default: 30)",
     )
     parser.add_argument(
         "--prefilter-min-score",
         type=int,
-        default=1,
+        default=2,
         metavar="N",
-        help="Minimum keyword matches for an entry to pass the pre-filter (default: 1)",
+        help="Minimum keyword matches for an entry to pass the pre-filter (default: 2)",
     )
     parser.add_argument(
         "--batch-size",

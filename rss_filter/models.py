@@ -29,3 +29,6 @@ class FilterResult:
     keep: bool
     reason: str
     score: Optional[float] = field(default=None)  # Relevance score 0–1, set by reranker
+    exemplars: list[dict] = field(
+        default_factory=list
+    )  # [{"text": str, "score": float}]

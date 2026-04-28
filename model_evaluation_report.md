@@ -122,17 +122,72 @@ All VRAM estimates assume Q4_K_M quantization. A rule of thumb: BF16 requires ~2
 - **Cons:** Leaves ~1 GB for KV cache — tight but workable for this task's modest context sizes (~4–8K tokens/call); slower than 4B (~5–12 tok/s on GTX 1070)
 - **Verdict:** **Best local option for quality.** The structured output tasks in this project (numbered label lists) benefit meaningfully from a larger model. Worth trying if pass-1/pass-2 parsing errors are observed with the current setup.
 
-### 4.3 Models That Do Not Fit
+### 4.3 Benchmarked: Qwen3-30B-A3B (`qwen/qwen3-30b-a3b`)
+
+This model was benchmarked live on 2026-04-27 against all three task types.
+
+#### Architecture
+
+| Property | Value |
+|---|---|
+| **Model** | `Qwen/Qwen3-30B-A3B` (HF) / `qwen/qwen3.6-35b-a3b` (LM Studio) |
+| **Architecture** | MoE — **30.5B total / 3.3B active** parameters |
+| **Layers / Experts** | 48 layers, 128 experts (8 active per token) |
+| **Context window** | 32,768 tokens native (131K with YaRN RoPE scaling, non-default) |
+| **License** | Apache 2.0 |
+
+#### VRAM Analysis
+
+| Quantization | Approx. VRAM | Fits GTX 1070? |
+|---|---|---|
+| **Q4_K_M** | ~16–17 GB | **No** — requires CPU offloading on this machine |
+
+LM Studio can run this model by offloading most layers to CPU (the machine has 32 GB RAM), but this eliminates the GPU inference speed advantage. The model was confirmed running via LM Studio with CPU+GPU split offloading.
+
+#### Thinking Mode — Critical Issue
+
+Qwen3 defaults to **thinking mode**: chain-of-thought reasoning inside `<think>...</think>` tokens before producing the answer. Via the LM Studio OpenAI-compatible API, **thinking cannot be disabled** through either the `/no_think` prompt suffix or `extra_body={"thinking": False}`. Each call generates ~2,000–2,600 reasoning tokens before the actual answer (~27–152 tokens). This is ~98% overhead per call.
+
+#### Benchmark Results (measured live)
+
+| Task | Wall-clock time | Thinking tokens | Answer tokens | Total tok/s | Accuracy |
+|---|---|---|---|---|---|
+| Pass-1 (10 titles) | 236.6 s | 2,632 | 43 | 11.3 | **10/10 perfect** |
+| Pass-2 (5 entries + summaries) | 229.0 s | 2,398 | 152 | 11.1 | **Perfect** |
+| Rerank (5 entries) | 200.7 s | 2,185 | 27 | 11.0 | **Valid scores** |
+
+**Interpretation:**
+- Accuracy is excellent — Qwen3 answered all tasks correctly.
+- Speed is 3–4 minutes per call, compared to ~3–30 seconds for Gemma 4 E4B Q4.
+- A full daily run (490 entries, multiple passes) would take **several hours** — completely impractical.
+- The ~11 tok/s total rate reflects CPU-offloaded inference; the thinking tokens alone account for ~200–230 of those seconds.
+
+#### Potential Workaround
+
+LM Studio may allow disabling thinking mode via a **model-level system prompt override** in the model's configuration panel (not via API parameters). If `/no_think` can be injected at the LM Studio layer before every request, effective throughput would drop to answer tokens only (~27–152 tokens/call), which would be much faster. This was not tested.
+
+#### Verdict
+
+| Criterion | Assessment |
+|---|---|
+| **Fits in VRAM** | **No** — requires CPU offload (~16–17 GB Q4) |
+| **Accuracy** | Excellent — perfect on all benchmark tasks |
+| **Speed (as-is)** | **Impractical** — 3–4 min/call due to thinking mode + CPU offload |
+| **Speed (if thinking disabled)** | Potentially usable — needs LM Studio system prompt workaround |
+| **Overall** | **Not recommended in current configuration.** Accuracy is better than Gemma 4 E4B, but the combination of no native VRAM fit and forced thinking mode makes it ~50–100× slower. Revisit if thinking can be disabled at the LM Studio config level. |
+
+### 4.4 Models That Do Not Fit
 
 | Model | Q4 VRAM | Reason |
 |---|---|---|
+| **Qwen3-30B-A3B** | ~16–17 GB | MoE total weight exceeds VRAM; requires CPU offload |
 | **Gemma 3 27B** | ~15 GB | 3× over VRAM ceiling |
 | **Gemma 4 26B A4B MoE** | ~14–15 GB | 26B total weights; MoE reduces compute but not memory footprint |
 | **Gemma 4 31B** | ~17 GB | Far exceeds VRAM |
 | **DeepSeek V4 Flash** (local) | ~50+ GB | 284B total params; cluster-scale only |
 | **DeepSeek V4 Pro** (local) | ~400+ GB | 1.6T params; not consumer-feasible |
 
-### 4.4 Local Summary Table
+### 4.5 Local Summary Table
 
 | Model | Q4 VRAM | Speed (est.) | Quality | Fits? | Verdict |
 |---|---|---|---|---|---|
@@ -142,6 +197,7 @@ All VRAM estimates assume Q4_K_M quantization. A rule of thumb: BF16 requires ~2
 | Gemma 4 E4B | ~4.5–5 GB | Moderate | Moderate | Yes (Q4 only) | Current — functional |
 | Gemma 3 27B | ~15 GB | — | Excellent | **No** | VRAM exceeded |
 | Gemma 4 26B A4B MoE | ~14–15 GB | — | Excellent | **No** | VRAM exceeded |
+| Qwen3-30B-A3B | ~16–17 GB | Very slow (CPU offload + thinking) | Excellent | **No** (CPU offload only) | Impractical as-is |
 
 ---
 
@@ -265,6 +321,7 @@ If privacy with cloud is a concern, **Gemma 3 27B via OpenRouter** (~$0.03/month
 |---|---|
 | Maximum privacy | Local: Gemma 4 E4B Q4 (current) or Gemma 3 12B Q4 |
 | Best local quality | **Gemma 3 12B Q4** via LM Studio |
+| Best local quality (if thinking can be disabled) | Qwen3-30B-A3B via LM Studio (CPU offload — slow but accurate) |
 | Best cloud quality/cost | **DeepSeek V4 Flash** via DeepSeek API |
 | Best cloud, US privacy | **Gemma 3 27B** via OpenRouter |
 | Absolute best quality (cost no concern) | DeepSeek V4 Pro (overkill for this task) |
@@ -282,6 +339,7 @@ The most impactful upgrades, in order of impact:
 1. **Gemma 3 12B Q4 locally** — better instruction following, same hardware, no privacy trade-off
 2. **DeepSeek V4 Flash via API** — full-precision quality, negligible cost, requires trusting a Chinese API provider
 3. **GPU upgrade** — an RTX 3090 (24 GB GDDR6X) would unlock Q8 precision and 3–4× faster inference for any model ≤ 24B
+4. **Qwen3-30B-A3B locally (conditional)** — excellent accuracy was confirmed in benchmarks, but the mandatory thinking mode (CPU offload + 2,000–2,600 thinking tokens/call) makes it ~50–100× slower than Gemma 4 E4B. Only viable if thinking can be disabled via LM Studio's model configuration.
 
 ---
 

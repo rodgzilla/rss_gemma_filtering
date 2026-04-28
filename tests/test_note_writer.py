@@ -20,7 +20,11 @@ from rss_filter.note_writer import (
 
 
 def _make_result(
-    title: str, url: str, is_arxiv: bool, reason: str = "Relevant topic"
+    title: str,
+    url: str,
+    is_arxiv: bool,
+    reason: str = "Relevant topic",
+    exemplars: list[dict] | None = None,
 ) -> FilterResult:
     entry = RSSEntry(
         title=title,
@@ -30,7 +34,12 @@ def _make_result(
         is_arxiv=is_arxiv,
         guid=url,
     )
-    return FilterResult(entry=entry, keep=True, reason=reason)
+    return FilterResult(
+        entry=entry,
+        keep=True,
+        reason=reason,
+        exemplars=exemplars or [],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -61,15 +70,19 @@ def test_render_reading_section_contains_title_and_url():
     assert "https://example.com/post" in section
 
 
-def test_render_reading_section_contains_reason():
+def test_render_reading_section_contains_exemplar():
     results = [
         _make_result(
-            "Post", "https://x.com", is_arxiv=False, reason="Matches interest in games"
+            "Post",
+            "https://x.com",
+            is_arxiv=False,
+            exemplars=[{"text": "vault note about games", "score": 0.87}],
         )
     ]
     section = render_reading_section(results)
 
-    assert "Matches interest in games" in section
+    assert "vault note about games" in section
+    assert "0.8700" in section
 
 
 def test_render_reading_section_has_heading():
@@ -166,7 +179,10 @@ def test_write_note_skips_when_both_lists_empty(tmp_path):
 def test_write_note_file_contains_correct_content(tmp_path):
     reading = [
         _make_result(
-            "Cool Blog", "https://cool.com", is_arxiv=False, reason="Interesting tech"
+            "Cool Blog",
+            "https://cool.com",
+            is_arxiv=False,
+            exemplars=[{"text": "Cool tech article", "score": 0.91}],
         )
     ]
     write_note(tmp_path, reading, [], date="2025-01-15")
@@ -174,4 +190,4 @@ def test_write_note_file_contains_correct_content(tmp_path):
     content = (tmp_path / "Filtered feed" / "RSS-2025-01-15.md").read_text()
     assert "Cool Blog" in content
     assert "https://cool.com" in content
-    assert "Interesting tech" in content
+    assert "Cool tech article" in content

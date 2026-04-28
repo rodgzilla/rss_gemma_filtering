@@ -15,15 +15,25 @@ def get_output_path(vault_path: Path, date: str) -> Path:
     return vault_path / _OUTPUT_FOLDER / f"RSS-{date}.md"
 
 
+def _render_exemplars(exemplars: list[dict]) -> list[str]:
+    """Return indented lines listing k-NN exemplars with their similarity scores."""
+    if not exemplars:
+        return []
+    lines = []
+    for ex in exemplars:
+        lines.append(f"  - `{ex['score']:.4f}` {ex['text']}")
+    return lines
+
+
 def render_reading_section(results: List[FilterResult]) -> str:
     """Render the ## Reading section from a list of FilterResult objects."""
     if not results:
         return ""
     lines = ["## Reading", ""]
     for r in results:
-        score_str = f" *(score: {r.score:.1f})*" if r.score is not None else ""
+        score_str = f" *(score: {r.score:.4f})*" if r.score is not None else ""
         lines.append(f"- [{r.entry.title}]({r.entry.url}){score_str}")
-        lines.append(f"  > {r.reason}")
+        lines.extend(_render_exemplars(r.exemplars))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -34,9 +44,9 @@ def render_arxiv_section(results: List[FilterResult]) -> str:
         return ""
     lines = ["## Arxiv monitoring", ""]
     for r in results:
-        score_str = f" *(score: {r.score:.1f})*" if r.score is not None else ""
+        score_str = f" *(score: {r.score:.4f})*" if r.score is not None else ""
         lines.append(f"- [{r.entry.title}]({r.entry.url}){score_str}")
-        lines.append(f"  > {r.reason}")
+        lines.extend(_render_exemplars(r.exemplars))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
