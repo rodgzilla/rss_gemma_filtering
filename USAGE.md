@@ -3,9 +3,9 @@
 ## Requirements
 
 - Python 3.11+
-- [LM Studio](https://lmstudio.ai/) running locally with `google/gemma-4-e4b` loaded
-  - Set context length to at least **16384** tokens in LM Studio
-  - The server must be listening at `http://localhost:1234/v1` (default)
+- A local embedding server compatible with the OpenAI API
+  (e.g. [LM Studio](https://lmstudio.ai/) with `text-embedding-embeddinggemma-300m-qat` loaded)
+  listening at `http://localhost:1234/v1` (default)
 - An Obsidian vault with daily notes under `Daily notes/YYYY-MM-DD.md`
 - An OPML export of your RSS subscriptions
 
@@ -22,26 +22,40 @@ pip install -r requirements.txt
 Edit `config.toml` before your first run:
 
 ```toml
-[lmstudio]
+[embedding]
 base_url = "http://localhost:1234/v1"
-model = "google/gemma-4-e4b"
-temperature = 0.1
+model = "text-embedding-embeddinggemma-300m-qat"
+store_path = "embedding_store.db"
+top_k = 3
+top_quantile = 0.20
+top_quantile_arxiv = 0.05
+decay_lambda = 1.0
+umap_model_path = "umap_model.joblib"
+umap_growth_threshold = 0.1
+vault_bg_max = 500
 
 [paths]
 seen_entries = "seen_entries.json"
-interest_profile = "interest_profile.md"
 
 [vault]
 daily_notes_folder = "Daily notes"
 output_folder = "Filtered feed"
 ```
 
-- `base_url` — LM Studio API endpoint (leave as-is unless you changed the port)
-- `model` — model identifier as shown in LM Studio
-- `seen_entries` — path to the deduplication state file (created automatically)
-- `interest_profile` — path to the cached interest profile (created automatically)
-- `daily_notes_folder` — subfolder inside your vault that contains daily notes
-- `output_folder` — subfolder inside your vault where digest notes are written
+Key settings:
+
+| Key | Description |
+|---|---|
+| `base_url` | Embedding server API endpoint |
+| `model` | Embedding model identifier as shown in LM Studio |
+| `store_path` | Path to the SQLite embedding database (created automatically) |
+| `top_k` | Number of nearest-neighbour exemplars retrieved per entry |
+| `top_quantile` | Top fraction of reading entries to keep (0.20 → top 20 %) |
+| `top_quantile_arxiv` | Top fraction of arXiv entries to keep (separate threshold) |
+| `decay_lambda` | Exponential decay weight for score aggregation |
+| `seen_entries` | Path to the deduplication state file (created automatically) |
+| `daily_notes_folder` | Subfolder inside your vault containing daily notes |
+| `output_folder` | Subfolder inside your vault where digest notes are written |
 
 ## Basic Usage
 
@@ -50,13 +64,15 @@ python main.py --vault /path/to/your/vault --feeds /path/to/subscriptions.opml
 ```
 
 On the first run this will:
-1. Parse all daily notes to build your interest profile (LLM-intensive, may take 10–30 min)
-2. Fetch all RSS feeds from the OPML file
+
+1. Parse all daily notes and embed every saved article into a local SQLite vector store
+2. Fetch all RSS feeds listed in the OPML file
 3. Discard entries older than 7 days and entries already seen in a previous run
-4. **Keyword pre-filter**: drop entries whose title/summary share no keywords with your profile
-5. **Batch LLM filtering**: send surviving entries to the LLM in groups of 10
+4. Embed each new entry and score it by cosine similarity against the vault store
+5. Keep the top-scoring entries according to the configured quantile thresholds
 6. Write the digest to `<vault>/Filtered feed/RSS-YYYY-MM-DD.md`
-7. Save seen entry GUIDs to `seen_entries.json` so they are skipped next time
+7. Write an interactive UMAP score visualisation to `<vault>/Filtered feed/RSS-YYYY-MM-DD-scores.html`
+8. Save seen entry GUIDs to `seen_entries.json` so they are skipped next time
 
 ## All Flags
 
@@ -65,18 +81,16 @@ On the first run this will:
 | `--vault PATH` | required | Path to your Obsidian vault root |
 | `--feeds PATH` | required | Path to your OPML subscriptions file |
 | `--config PATH` | `config.toml` | Path to a custom config file |
+| `--max-notes N` | all notes | Limit embedding build to the N most recent daily notes |
 | `--max-age-days N` | `7` | Only evaluate entries published within the last N days |
-| `--max-notes N` | all notes | Limit profiling to the N most recent daily notes |
-| `--rebuild-profile` | off | Ignore the cached profile and regenerate it from scratch |
-| `--no-prefilter` | off | Disable keyword pre-filter (send all entries to LLM) |
-| `--prefilter-keywords N` | `60` | Number of top keywords to extract from the profile |
-| `--prefilter-min-score N` | `1` | Min keyword matches to pass the pre-filter |
-| `--batch-size N` | `20` | Entries per pass-1 (title-only) LLM call |
-| `--pass2-batch-size N` | `10` | Entries per pass-2 (title+summary) LLM call |
-| `--summary-chars N` | `300` | Characters of summary shown to the LLM in pass 2 |
-| `--rerank` | off | Score and sort kept entries by relevance (1–10) using an extra LLM call |
-| `--rerank-batch-size N` | `20` | Entries per re-ranking LLM call |
-| `--dry-run` | off | Print filtered entries to stdout instead of writing a note |
+| `--rebuild-embeddings` | off | Force full rebuild of the embedding database from scratch |
+| `--top-quantile Q` | config / `0.25` | Top fraction of reading entries to keep (e.g. `0.20`) |
+| `--top-quantile-arxiv Q` | same as `--top-quantile` | Top fraction of arXiv entries to keep |
+| `--decay-lambda L` | config / `1.0` | Exponential decay weight for score aggregation |
+| `--rebuild-umap` | off | Force refit of the UMAP model on vault embeddings |
+| `--vault-bg-max N` | config / `500` | Max vault background points shown in the UMAP panel |
+| `--no-seen-filter` | off | Skip deduplication against `seen_entries.json` (testing) |
+| `--dry-run` | off | Print filtered entries to stdout; do not write a note |
 
 ## Common Workflows
 
@@ -88,8 +102,8 @@ python main.py \
   --feeds ~/Documents/subscriptions.opml
 ```
 
-The profile is loaded from cache (`interest_profile.md`). Only entries newer than 7 days
-and not yet seen are evaluated. The digest is written to the vault.
+The embedding store is updated incrementally (only new vault notes are embedded).
+Only entries newer than 7 days and not yet seen are scored and evaluated.
 
 ### Preview without writing anything
 
@@ -100,33 +114,31 @@ python main.py \
   --dry-run
 ```
 
-Prints the filtered entries to stdout. Nothing is written to disk and no GUIDs are saved
-as seen, so the same entries will appear again on the next run.
+Prints filtered entries to stdout. Nothing is written to disk and no GUIDs are saved as
+seen, so the same entries will appear again on the next run.
 
-### Rebuild the interest profile from scratch
+### Force a full rebuild of the embedding database
 
-Use this after adding many new daily notes or if the cached profile feels stale:
+Use this after bulk-importing many old daily notes or if the store seems corrupted:
 
 ```bash
 python main.py \
   --vault ~/Documents/MyVault \
   --feeds ~/Documents/subscriptions.opml \
-  --rebuild-profile
+  --rebuild-embeddings
 ```
 
-### Quick prototype / test run
-
-Limit profiling to the 5 most recent notes and preview output without writing:
+### Quick smoke test against the mock vault
 
 ```bash
 python main.py \
-  --vault ~/Documents/MyVault \
-  --feeds ~/Documents/subscriptions.opml \
-  --max-notes 5 \
+  --vault mock_vault \
+  --feeds rss_feeds/feeds_2026-04-24.opml.xml \
+  --max-notes 3 \
   --dry-run
 ```
 
-### Fetch entries from the last 14 days instead of 7
+### Fetch entries from the last 14 days
 
 ```bash
 python main.py \
@@ -144,67 +156,15 @@ python main.py \
   --config ~/dotfiles/rss_filter_config.toml
 ```
 
-### Run against the mock vault (development / smoke test)
+### Override quantile thresholds at the command line
 
 ```bash
 python main.py \
-  --vault mock_vault \
-  --feeds rss_feeds/feeds_2026-04-24.opml.xml \
-  --max-notes 3 \
-  --dry-run
+  --vault ~/Documents/MyVault \
+  --feeds ~/Documents/subscriptions.opml \
+  --top-quantile 0.30 \
+  --top-quantile-arxiv 0.10
 ```
-
-## Performance Tuning
-
-By default the pipeline uses two speed-up layers before reaching the LLM:
-
-### 1. Keyword pre-filter (no LLM, instant)
-
-Top keywords are extracted from your interest profile and each entry's title + summary is
-scored by keyword overlap.  Entries with zero matches are dropped immediately.
-
-- Increase `--prefilter-min-score` (e.g. `2`) to be more aggressive — fewer LLM calls,
-  but higher risk of dropping borderline entries.
-- Increase `--prefilter-keywords` (e.g. `100`) for a broader keyword set.
-- Disable entirely with `--no-prefilter` if you want the LLM to see everything.
-
-### 2. Two-pass batch LLM filtering
-
-Entries are processed in two passes rather than one call per entry.
-
-**Pass 1 — title-only, large batches** (`--batch-size`, default 20):
-The LLM sees only titles and replies `yes`, `no`, or `?` per entry.
-Clear yes/no entries are resolved immediately with no further cost.
-
-**Pass 2 — title + summary snippet, smaller batches** (`--pass2-batch-size`, default 10):
-Only entries marked `?` in pass 1 are re-evaluated with a short summary excerpt
-(`--summary-chars` characters, default 300). The LLM replies `yes/no` only.
-
-- Increase `--batch-size` (e.g. `30`) for even fewer pass-1 calls.
-- Increase `--summary-chars` if pass-2 decisions feel uninformed; decrease it
-  to keep prompts shorter.
-- Decrease `--pass2-batch-size` (e.g. `5`) if the model mis-numbers lines in
-  pass 2.
-
-### 3. Re-ranking (optional, `--rerank`)
-
-After filtering, the LLM scores each kept entry from **1** (weakly relevant) to **10** (highly
-relevant). Entries are then sorted descending so the most relevant items appear first in the
-digest. Scores are shown inline as `*(score: 0.8)*`.
-
-- Use `--rerank-batch-size N` (default `20`) to control how many entries are scored per call.
-- Re-ranking adds one extra LLM call per batch of kept entries. For typical digests (~20–50
-  kept entries) this adds ~1–3 minutes.
-- Skip it with the default (no flag) if speed is the priority.
-
-### Typical throughput
-
-| Configuration | ~1200 entries/day |
-|---|---|
-| Single-entry (original) | ~8–9 hours |
-| Pre-filter only (min-score=1) | ~30–60 min (depends on hit rate) |
-| Pre-filter + batch 10 | **~5–15 min** |
-| Pre-filter + batch 20 | ~3–8 min |
 
 ## Output Format
 
@@ -215,22 +175,27 @@ Filtered entries are written to `<vault>/Filtered feed/RSS-YYYY-MM-DD.md`:
 
 ## Reading
 
-- [Some Article Title](https://example.com/article) *(score: 0.9)*
-  > Directly relevant to your interest in X
+- [Some Article Title](https://example.com/article) *(score: 0.8731)*
+  > Nearest matches: "Related article A" (0.91), "Related article B" (0.87)
 
 ## Arxiv monitoring
 
-- [A Paper on Topic Y](https://arxiv.org/abs/1234.56789) *(score: 0.7)*
-  > Matches your recurring interest in Y and Z
+- [A Paper on Topic Y](https://arxiv.org/abs/1234.56789) *(score: 0.6412)*
+  > Nearest matches: "Prior paper X" (0.84), "Prior paper Z" (0.79)
 ```
 
-The `*(score: X.X)*` tag is only shown when `--rerank` is enabled.
+Each entry shows its aggregated similarity score and the top-K nearest vault articles
+that contributed to the score.
+
+An interactive HTML UMAP visualisation (`RSS-YYYY-MM-DD-scores.html`) is also written
+to the same folder, showing kept and rejected entries projected onto the vault embedding
+space.
 
 ## Deduplication
 
-Every entry processed in a non-dry-run is recorded in `seen_entries.json`. On the next run,
-those entries are skipped regardless of their publication date. To reset deduplication state
-(e.g. to reprocess all current entries), delete `seen_entries.json`:
+Every entry processed in a non-dry-run is recorded in `seen_entries.json`. On the next
+run those entries are skipped regardless of their publication date. To reset
+deduplication state (e.g. to reprocess all current entries), delete the file:
 
 ```bash
 rm seen_entries.json
@@ -242,4 +207,4 @@ rm seen_entries.json
 pytest tests/
 ```
 
-All tests use mocked LLM and HTTP calls and complete in under a second.
+All tests use mocked HTTP calls and complete in under a second.
