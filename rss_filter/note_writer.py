@@ -79,7 +79,6 @@ def _render_click_listener_block() -> str:
         "    attr: { style: 'color: #89b4fa;' } });\n"
         "};\n"
         "window.addEventListener('message', handler);\n"
-        "this.register(() => window.removeEventListener('message', handler));\n"
     )
     return f"```dataviewjs\n{js}```\n"
 

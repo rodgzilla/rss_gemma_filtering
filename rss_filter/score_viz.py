@@ -283,7 +283,7 @@ def write_score_viz(
             trace["customdata"] = [urls[i] for i in idx]
         return trace
 
-    def _feed_bar_traces(pairs, xax, yax):
+    def _feed_bar_traces(pairs, xax, yax, showlegend=True):
         """Build kept + rejected horizontal bar traces for a group of (result, meta) pairs."""
         if not pairs:
             return []
@@ -312,6 +312,7 @@ def write_score_viz(
             "marker": {"color": kept_colour, "opacity": 0.75},
             "xaxis": xax,
             "yaxis": yax,
+            "showlegend": showlegend,
         }
         rejected_trace = {
             "type": "bar",
@@ -322,6 +323,7 @@ def write_score_viz(
             "marker": {"color": rejected_colour, "opacity": 0.4},
             "xaxis": xax,
             "yaxis": yax,
+            "showlegend": showlegend,
         }
         return [kept_trace, rejected_trace]
 
@@ -360,7 +362,7 @@ def write_score_viz(
     all_traces += _feed_bar_traces(reading_pairs, "x1", "y1")
 
     # Row 2 — arXiv bar chart (x3/y3)
-    all_traces += _feed_bar_traces(arxiv_pairs, "x3", "y3")
+    all_traces += _feed_bar_traces(arxiv_pairs, "x3", "y3", showlegend=False)
 
     # Vault-fitted UMAP traces
     all_traces += _vault_umap_traces(
@@ -377,70 +379,41 @@ def write_score_viz(
     n_total = len(results)
 
     # --- Layout: 2 rows × 2 columns ---
+    # LEFT_X starts at 0.20 to give room for long feed name labels on the y-axis.
     TOP_Y = [0.55, 1.00]
     BOT_Y = [0.00, 0.45]
-    LEFT_X = [0.00, 0.46]
-    RIGHT_X = [0.54, 1.00]
+    LEFT_X = [0.20, 0.48]
+    RIGHT_X = [0.55, 1.00]
 
     layout = {
         "title": {"text": f"RSS Score Analysis — {today} ({n_kept}/{n_total} kept)"},
         "hovermode": "closest",
         "barmode": "stack",
         # Row 1 — Reading
-        "xaxis": {"domain": LEFT_X, "title": "Entry count", "anchor": "y1"},
-        "yaxis": {"domain": TOP_Y, "anchor": "x1", "title": "Feed"},
+        "xaxis": {"domain": LEFT_X, "anchor": "y1"},
+        "yaxis": {"domain": TOP_Y, "anchor": "x1", "title": "Reading"},
         "xaxis2": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y2"},
         "yaxis2": {"domain": TOP_Y, "title": "UMAP dim 2", "anchor": "x2"},
         # Row 2 — arXiv
         "xaxis3": {"domain": LEFT_X, "title": "Entry count", "anchor": "y3"},
-        "yaxis3": {"domain": BOT_Y, "anchor": "x3", "title": "Feed"},
+        "yaxis3": {"domain": BOT_Y, "anchor": "x3", "title": "arXiv"},
         "xaxis4": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y4"},
         "yaxis4": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x4"},
-        "legend": {"orientation": "h", "y": -0.05},
+        "legend": {"orientation": "h", "y": -0.05, "x": 0.5, "xanchor": "center"},
         "paper_bgcolor": "#1e1e2e",
         "plot_bgcolor": "#2a2a3e",
         "font": {"color": "#cdd6f4"},
+        "margin": {"l": 160},
         "shapes": [],
         "annotations": [
-            # Column headings
-            {
-                "text": "Entries per feed",
-                "xref": "paper",
-                "yref": "paper",
-                "x": 0.23,
-                "y": 1.04,
-                "showarrow": False,
-                "font": {"size": 12, "color": "#a6adc8"},
-            },
             {
                 "text": "UMAP — vault projection",
                 "xref": "paper",
                 "yref": "paper",
-                "x": 0.77,
+                "x": 0.775,
                 "y": 1.04,
                 "showarrow": False,
                 "font": {"size": 12, "color": "#a6adc8"},
-            },
-            # Row labels
-            {
-                "text": "<b>Reading</b>",
-                "xref": "paper",
-                "yref": "paper",
-                "x": -0.01,
-                "y": (TOP_Y[0] + TOP_Y[1]) / 2,
-                "showarrow": False,
-                "textangle": -90,
-                "font": {"size": 13, "color": "#cdd6f4"},
-            },
-            {
-                "text": "<b>arXiv</b>",
-                "xref": "paper",
-                "yref": "paper",
-                "x": -0.01,
-                "y": (BOT_Y[0] + BOT_Y[1]) / 2,
-                "showarrow": False,
-                "textangle": -90,
-                "font": {"size": 13, "color": "#cdd6f4"},
             },
         ],
     }
