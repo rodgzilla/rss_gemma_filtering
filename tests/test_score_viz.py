@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -234,8 +236,6 @@ class TestWriteScoreViz:
         """Layout must define 4 independent axis pairs for the 2×2 grid."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
-        import json, re
-
         layout_match = re.search(r"var layout = ({.*?});\s*Plotly", html, re.DOTALL)
         assert layout_match, "Could not find layout JSON in HTML"
         layout = json.loads(layout_match.group(1))
@@ -246,8 +246,6 @@ class TestWriteScoreViz:
         """x1/x3 axes must not carry scatter traces (they are bar chart axes now)."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
-        import json, re
-
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
@@ -266,11 +264,10 @@ class TestWriteScoreViz:
         """Bar traces for the reading row must be present on x1."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
-        import json, re
-
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
+        assert traces_match, "Could not find traces JSON in HTML"
         traces = json.loads(traces_match.group(1))
         bar_traces = [
             t for t in traces if t.get("type") == "bar" and t.get("xaxis") == "x1"
@@ -281,11 +278,10 @@ class TestWriteScoreViz:
         """Bar traces for the arXiv row must be present on x3."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
-        import json, re
-
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
+        assert traces_match, "Could not find traces JSON in HTML"
         traces = json.loads(traces_match.group(1))
         bar_traces = [
             t for t in traces if t.get("type") == "bar" and t.get("xaxis") == "x3"
@@ -296,8 +292,6 @@ class TestWriteScoreViz:
         """Bar chart y-axis values must include the feed name from the entries."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
-        import json, re
-
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
@@ -313,8 +307,6 @@ class TestWriteScoreViz:
         """Kept bar segment must use green colour #2ecc71."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
-        import json, re
-
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
@@ -332,8 +324,6 @@ class TestWriteScoreViz:
         """Reading article titles must appear in traces assigned to the reading row."""
         out = self._mixed_call(tmp_path, n_reading=2, n_arxiv=2)
         html = out.read_text()
-        import json, re
-
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
@@ -350,8 +340,6 @@ class TestWriteScoreViz:
         """arXiv article titles must appear in traces assigned to the arXiv row."""
         out = self._mixed_call(tmp_path, n_reading=2, n_arxiv=2)
         html = out.read_text()
-        import json, re
-
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
