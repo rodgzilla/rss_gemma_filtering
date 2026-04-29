@@ -29,6 +29,8 @@ from rss_filter.score_filter import MATRYOSHKA_DIM
 # Per-feed dot grid colour palette
 # ---------------------------------------------------------------------------
 
+_DOT_SIZE_THRESHOLD = 200  # switch to smaller dots above this article count
+
 _FEED_PALETTE = [
     "#e74c3c",  # red
     "#e67e22",  # orange
@@ -324,6 +326,7 @@ def write_score_viz(
 
         cols = 20
 
+        # Count kept per feed
         kept_by_feed: dict[str, int] = defaultdict(int)
         for r, _ in pairs:
             if r.keep:
@@ -340,55 +343,66 @@ def write_score_viz(
             f: _FEED_PALETTE[i % len(_FEED_PALETTE)] for i, f in enumerate(all_feeds)
         }
 
-        dot_size = 6 if len(pairs) > 200 else 10
+        dot_size = 6 if len(pairs) > _DOT_SIZE_THRESHOLD else 10
 
-        # Order: for each feed (kept-count desc), kept articles then rejected
+        # Group articles by feed and kept/rejected status in a single O(n) pass
+        feed_kept_items: dict[str, list] = {f: [] for f in all_feeds}
+        feed_rejected_items: dict[str, list] = {f: [] for f in all_feeds}
+        for r, m in pairs:
+            feed = r.entry.feed_name
+            if r.keep:
+                feed_kept_items[feed].append((r, m))
+            else:
+                feed_rejected_items[feed].append((r, m))
+
+        # Build ordered list: kept-count-desc feeds, kept then rejected within each
         ordered = []
         for feed in all_feeds:
-            ordered += [
-                (r, m) for r, m in pairs if r.entry.feed_name == feed and r.keep
-            ]
-            ordered += [
-                (r, m) for r, m in pairs if r.entry.feed_name == feed and not r.keep
-            ]
+            ordered += feed_kept_items[feed]
+            ordered += feed_rejected_items[feed]
 
-        # Compute (col, row) positions
-        xs = [pos % cols for pos in range(len(ordered))]
-        ys = [pos // cols for pos in range(len(ordered))]
+        # Build position maps: feed×status → list of grid positions (O(n) total)
+        feed_kept_pos: dict[str, list[int]] = {f: [] for f in all_feeds}
+        feed_rejected_pos: dict[str, list[int]] = {f: [] for f in all_feeds}
+        for pos, (r, _) in enumerate(ordered):
+            feed = r.entry.feed_name
+            if r.keep:
+                feed_kept_pos[feed].append(pos)
+            else:
+                feed_rejected_pos[feed].append(pos)
 
-        # Build one trace per feed×status (kept and rejected)
+        def _pos_to_xy(positions: list[int]) -> tuple[list[int], list[int]]:
+            return [p % cols for p in positions], [p // cols for p in positions]
+
+        # Build traces
         traces = []
         for feed in all_feeds:
             intense = feed_colour[feed]
             muted = _muted_colour(intense)
-            for status, colour, label_suffix in [
-                (True, intense, " kept"),
-                (False, muted, " rejected"),
+            for status_positions, colour, label_suffix, show in [
+                (feed_kept_pos[feed], intense, " kept", showlegend),
+                (feed_rejected_pos[feed], muted, " rejected", False),
             ]:
-                indices = [
-                    i
-                    for i, (r, _) in enumerate(ordered)
-                    if r.entry.feed_name == feed and r.keep == status
-                ]
-                if not indices:
+                if not status_positions:
                     continue
-                trace_name = feed + label_suffix
+                hover_label = feed + label_suffix
+                x_vals, y_vals = _pos_to_xy(status_positions)
                 traces.append(
                     {
                         "type": "scatter",
                         "mode": "markers",
                         "name": feed,
                         "legendgroup": feed,
-                        "showlegend": showlegend and (status is True),
-                        "x": [xs[i] for i in indices],
-                        "y": [ys[i] for i in indices],
+                        "showlegend": show,
+                        "x": x_vals,
+                        "y": y_vals,
                         "marker": {
                             "color": colour,
                             "size": dot_size,
                             "opacity": 0.85,
                             "line": {"color": "rgba(0,0,0,0)", "width": 0},
                         },
-                        "hovertemplate": f"{trace_name}<extra></extra>",
+                        "hovertemplate": f"{hover_label}<extra></extra>",
                         "xaxis": xax,
                         "yaxis": yax,
                     }
