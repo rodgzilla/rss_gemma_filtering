@@ -301,3 +301,41 @@ def test_write_note_no_viz_block_without_viz_filename(tmp_path):
 
     content = (tmp_path / "Filtered feed" / "RSS-2025-01-15.md").read_text()
     assert "dataviewjs" not in content
+
+
+# ---------------------------------------------------------------------------
+# postMessage click listener block
+# ---------------------------------------------------------------------------
+
+
+def test_build_note_content_includes_click_listener_when_viz_given():
+    """When viz_filename is provided the note must include the postMessage listener block."""
+    content = build_note_content(
+        [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    assert "rss-viz-click" in content
+    assert "addEventListener" in content
+
+
+def test_build_note_content_no_click_listener_without_viz():
+    """Without a viz_filename, no postMessage listener block should appear."""
+    content = build_note_content([], [], date="2025-01-15")
+    assert "rss-viz-click" not in content
+
+
+def test_build_note_content_click_listener_after_viz_block():
+    """The postMessage listener block must appear after the iframe viz block."""
+    content = build_note_content(
+        [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    viz_pos = content.index("getResourcePath")
+    listener_pos = content.index("rss-viz-click")
+    assert listener_pos > viz_pos
+
+
+def test_build_note_content_click_listener_renders_link():
+    """The listener block must contain code to render a link element."""
+    content = build_note_content(
+        [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
+    )
+    assert "createEl" in content

@@ -58,6 +58,30 @@ def _render_viz_block(viz_filename: str) -> str:
     return f"```dataviewjs\n{js}```\n"
 
 
+def _render_click_listener_block() -> str:
+    """Return a DataviewJS block that listens for postMessage click events from the viz iframe.
+
+    When the user clicks a UMAP point in the embedded HTML chart, the iframe fires
+    a postMessage with { type: 'rss-viz-click', url, title }.  This block catches
+    that message and renders the article title as a clickable link directly in the note.
+    """
+    js = (
+        "const el = this.container.createEl('div', {\n"
+        "  attr: { style: 'padding: 4px 0; font-size: 13px; min-height: 20px;' }\n"
+        "});\n"
+        "el.setText('Click a point in the chart above to open an article.');\n"
+        "window.addEventListener('message', (event) => {\n"
+        "  if (!event.data || event.data.type !== 'rss-viz-click') return;\n"
+        "  const { url, title } = event.data;\n"
+        "  el.empty();\n"
+        "  el.createEl('span', { text: '\\u2192 ', attr: { style: 'color: #a6adc8;' } });\n"
+        "  el.createEl('a', { text: title || url, href: url,\n"
+        "    attr: { style: 'color: #89b4fa;' } });\n"
+        "});\n"
+    )
+    return f"```dataviewjs\n{js}```\n"
+
+
 def render_reading_section(results: List[FilterResult]) -> str:
     """Render the ## Reading section from a list of FilterResult objects."""
     if not results:
@@ -110,6 +134,7 @@ def build_note_content(
     ]
     if viz_filename:
         parts.append(_render_viz_block(viz_filename))
+        parts.append(_render_click_listener_block())
     reading_section = render_reading_section(reading_results)
     if reading_section:
         parts.append(reading_section)
