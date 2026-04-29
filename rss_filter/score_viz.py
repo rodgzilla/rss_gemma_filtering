@@ -13,6 +13,7 @@ UMAP for panel 3 is fitted fresh on each run directly from the RSS batch.
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
@@ -278,7 +279,6 @@ def write_score_viz(
         """Build kept + rejected horizontal bar traces for a group of (result, meta) pairs."""
         if not pairs:
             return []
-        from collections import defaultdict
 
         kept_by_feed: dict[str, int] = defaultdict(int)
         rejected_by_feed: dict[str, int] = defaultdict(int)
@@ -301,7 +301,7 @@ def write_score_viz(
             "name": "Kept",
             "y": all_feeds,
             "x": kept_counts,
-            "marker": {"color": "#2ecc71", "opacity": 0.75},
+            "marker": {"color": kept_colour, "opacity": 0.75},
             "xaxis": xax,
             "yaxis": yax,
         }
@@ -311,7 +311,7 @@ def write_score_viz(
             "name": "Rejected",
             "y": all_feeds,
             "x": rejected_counts,
-            "marker": {"color": "#bdc3c7", "opacity": 0.4},
+            "marker": {"color": rejected_colour, "opacity": 0.4},
             "xaxis": xax,
             "yaxis": yax,
         }
@@ -367,12 +367,12 @@ def write_score_viz(
         "barmode": "stack",
         # Row 1 — Reading
         "xaxis": {"domain": LEFT_X, "title": "Entry count", "anchor": "y1"},
-        "yaxis": {"domain": TOP_Y, "anchor": "x1"},
+        "yaxis": {"domain": TOP_Y, "anchor": "x1", "title": "Feed"},
         "xaxis2": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y2"},
         "yaxis2": {"domain": TOP_Y, "title": "UMAP dim 2", "anchor": "x2"},
         # Row 2 — arXiv
         "xaxis3": {"domain": LEFT_X, "title": "Entry count", "anchor": "y3"},
-        "yaxis3": {"domain": BOT_Y, "anchor": "x3"},
+        "yaxis3": {"domain": BOT_Y, "anchor": "x3", "title": "Feed"},
         "xaxis4": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y4"},
         "yaxis4": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x4"},
         "legend": {"orientation": "h", "y": -0.05},
