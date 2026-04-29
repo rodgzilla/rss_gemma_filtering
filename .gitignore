@@ -12,3 +12,5 @@ mock_vault/Filtered feed/
 embedding_store.db
 umap_model.joblib
 umap_model.meta.json
+.worktrees/
+.superpowers/
