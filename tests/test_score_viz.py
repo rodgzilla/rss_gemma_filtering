@@ -130,14 +130,14 @@ class TestWriteScoreViz:
     def test_html_contains_reading_threshold_line(self, tmp_path):
         out = self._basic_call(tmp_path, threshold_reading=0.55, threshold_arxiv=0.40)
         html = out.read_text()
-        # Reading threshold label must be present
+        # Reading section label must be present
         assert "reading" in html.lower()
 
     def test_html_contains_arxiv_threshold_line(self, tmp_path):
         out = self._basic_call(tmp_path, threshold_reading=0.55, threshold_arxiv=0.40)
         html = out.read_text()
-        # arXiv threshold line should use distinct orange colour
-        assert "#f39c12" in html
+        # arXiv section must be labelled
+        assert "arxiv" in html.lower()
 
     def test_html_is_valid_structure(self, tmp_path):
         out = self._basic_call(tmp_path)
@@ -187,11 +187,11 @@ class TestWriteScoreViz:
         assert '"type": "histogram"' not in html
         assert "Score Distribution" not in html
 
-    def test_rss_only_umap_panel_present(self, tmp_path):
-        """Panel 3 annotation for RSS-only UMAP should appear with ≥2 entries."""
-        out = self._basic_call(tmp_path, n_entries=4)
+    def test_no_rss_only_umap_panel(self, tmp_path):
+        """RSS-only UMAP column must not appear in the output."""
+        out = self._mixed_call(tmp_path, n_reading=2, n_arxiv=2)
         html = out.read_text()
-        assert "RSS entries only" in html
+        assert "RSS entries only" not in html
 
     def test_vault_background_subsampled(self, tmp_path):
         """When vault is larger than vault_bg_max the file is still produced."""
@@ -200,7 +200,7 @@ class TestWriteScoreViz:
         html = out.read_text()
         assert "Plotly.newPlot" in html
 
-    # --- 2×3 layout tests ---
+    # --- 2×2 layout tests ---
 
     def _mixed_call(self, tmp_path: Path, n_reading: int = 3, n_arxiv: int = 3):
         """Helper that produces a mix of reading and arXiv entries."""
@@ -248,8 +248,8 @@ class TestWriteScoreViz:
         html = out.read_text()
         assert "arXiv" in html
 
-    def test_html_has_six_axis_domains(self, tmp_path):
-        """Layout must define 6 independent axis pairs for the 2×3 grid."""
+    def test_html_has_four_axis_domains(self, tmp_path):
+        """Layout must define 4 independent axis pairs for the 2×2 grid."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
         import json, re
@@ -258,10 +258,10 @@ class TestWriteScoreViz:
         assert layout_match, "Could not find layout JSON in HTML"
         layout = json.loads(layout_match.group(1))
         xaxis_keys = [k for k in layout if k.startswith("xaxis")]
-        assert len(xaxis_keys) >= 6, f"Expected ≥6 xaxis keys, got {xaxis_keys}"
+        assert len(xaxis_keys) == 4, f"Expected 4 xaxis keys, got {xaxis_keys}"
 
-    def test_scatter_marker_opacity_low(self, tmp_path):
-        """Score-scatter markers must have opacity ≤ 0.5 for readability."""
+    def test_no_scatter_on_x1(self, tmp_path):
+        """x1/x3 axes must not carry scatter traces (they are bar chart axes now)."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
         import json, re
@@ -271,15 +271,80 @@ class TestWriteScoreViz:
         )
         assert traces_match, "Could not find traces JSON in HTML"
         traces = json.loads(traces_match.group(1))
-        scatter_traces = [
+        scatter_on_bar_axes = [
             t
             for t in traces
-            if t.get("type") == "scatter" and t.get("xaxis") in ("x1", "x4")
+            if t.get("type") == "scatter" and t.get("xaxis") in ("x1", "x3")
         ]
-        assert scatter_traces, "No score-scatter traces found"
-        for t in scatter_traces:
-            opacity = t["marker"]["opacity"]
-            assert opacity <= 0.5, f"Expected opacity ≤ 0.5, got {opacity}"
+        assert not scatter_on_bar_axes, (
+            f"Unexpected scatter on bar axes: {scatter_on_bar_axes}"
+        )
+
+    def test_bar_traces_present_for_reading(self, tmp_path):
+        """Bar traces for the reading row must be present on x1."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        import json, re
+
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        bar_traces = [
+            t for t in traces if t.get("type") == "bar" and t.get("xaxis") == "x1"
+        ]
+        assert bar_traces, "Expected bar traces on x1 for reading row"
+
+    def test_bar_traces_present_for_arxiv(self, tmp_path):
+        """Bar traces for the arXiv row must be present on x3."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        import json, re
+
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        bar_traces = [
+            t for t in traces if t.get("type") == "bar" and t.get("xaxis") == "x3"
+        ]
+        assert bar_traces, "Expected bar traces on x3 for arXiv row"
+
+    def test_bar_traces_contain_feed_names(self, tmp_path):
+        """Bar chart y-axis values must include the feed name from the entries."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        import json, re
+
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        bar_traces = [t for t in traces if t.get("type") == "bar"]
+        all_y = [y for t in bar_traces for y in (t.get("y") or [])]
+        # _mixed_call uses feed_name="Test Feed"
+        assert "Test Feed" in all_y, (
+            f"Expected 'Test Feed' in bar y values, got {all_y}"
+        )
+
+    def test_bar_kept_colour_green(self, tmp_path):
+        """Kept bar segment must use green colour #2ecc71."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        import json, re
+
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        kept_bars = [
+            t for t in traces if t.get("type") == "bar" and "Kept" in t.get("name", "")
+        ]
+        assert kept_bars, "No kept bar traces found"
+        for t in kept_bars:
+            assert t["marker"]["color"] == "#2ecc71", (
+                f"Expected #2ecc71, got {t['marker']['color']}"
+            )
 
     def test_reading_entries_in_reading_row(self, tmp_path):
         """Reading article titles must appear in traces assigned to the reading row."""
@@ -291,10 +356,11 @@ class TestWriteScoreViz:
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
         traces = json.loads(traces_match.group(1))
+        # Reading row uses x1 (bar) and x2 (UMAP)
         reading_row_text = " ".join(
-            str(t.get("text", ""))
+            str(t.get("text", "") or "") + " ".join(str(v) for v in (t.get("y") or []))
             for t in traces
-            if t.get("xaxis") in ("x1", "x2", "x3")
+            if t.get("xaxis") in ("x1", "x2")
         )
         assert "Reading 0" in reading_row_text
 
@@ -308,9 +374,10 @@ class TestWriteScoreViz:
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
         traces = json.loads(traces_match.group(1))
+        # arXiv row uses x3 (bar) and x4 (UMAP)
         arxiv_row_text = " ".join(
-            str(t.get("text", ""))
+            str(t.get("text", "") or "") + " ".join(str(v) for v in (t.get("y") or []))
             for t in traces
-            if t.get("xaxis") in ("x4", "x5", "x6")
+            if t.get("xaxis") in ("x3", "x4")
         )
         assert "Arxiv 0" in arxiv_row_text
