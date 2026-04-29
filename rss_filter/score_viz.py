@@ -317,55 +317,83 @@ def write_score_viz(
             trace["customdata"] = [urls[i] for i in idx]
         return trace
 
-    def _feed_bar_traces(pairs, xax, yax, showlegend=True):
-        """Build kept + rejected horizontal bar traces for a group of (result, meta) pairs."""
+    def _feed_dot_traces(pairs, xax, yax, showlegend=True):
+        """Build unit dot grid scatter traces (one dot per article) for a row."""
         if not pairs:
             return []
 
+        cols = 20
+
         kept_by_feed: dict[str, int] = defaultdict(int)
-        rejected_by_feed: dict[str, int] = defaultdict(int)
         for r, _ in pairs:
-            feed = r.entry.feed_name
             if r.keep:
-                kept_by_feed[feed] += 1
-            else:
-                rejected_by_feed[feed] += 1
+                kept_by_feed[r.entry.feed_name] += 1
+
         all_feeds = sorted(
-            set(kept_by_feed) | set(rejected_by_feed),
+            {r.entry.feed_name for r, _ in pairs},
             key=lambda f: kept_by_feed[f],
             reverse=True,
         )
-        kept_counts = [kept_by_feed[f] for f in all_feeds]
-        rejected_counts = [rejected_by_feed[f] for f in all_feeds]
-        kept_trace = {
-            "type": "bar",
-            "orientation": "h",
-            "name": "Kept",
-            "y": all_feeds,
-            "x": kept_counts,
-            "text": all_feeds,
-            "textposition": "inside",
-            "insidetextanchor": "start",
-            "textfont": {"size": 11, "color": "#cdd6f4"},
-            "marker": {"color": kept_colour, "opacity": 0.75},
-            "xaxis": xax,
-            "yaxis": yax,
-            "showlegend": showlegend,
+
+        # Assign palette colour per feed
+        feed_colour = {
+            f: _FEED_PALETTE[i % len(_FEED_PALETTE)] for i, f in enumerate(all_feeds)
         }
-        rejected_trace = {
-            "type": "bar",
-            "orientation": "h",
-            "name": "Rejected",
-            "y": all_feeds,
-            "x": rejected_counts,
-            "text": ["" for _ in all_feeds],
-            "textposition": "inside",
-            "marker": {"color": rejected_colour, "opacity": 0.4},
-            "xaxis": xax,
-            "yaxis": yax,
-            "showlegend": showlegend,
-        }
-        return [kept_trace, rejected_trace]
+
+        dot_size = 6 if len(pairs) > 200 else 10
+
+        # Order: for each feed (kept-count desc), kept articles then rejected
+        ordered = []
+        for feed in all_feeds:
+            ordered += [
+                (r, m) for r, m in pairs if r.entry.feed_name == feed and r.keep
+            ]
+            ordered += [
+                (r, m) for r, m in pairs if r.entry.feed_name == feed and not r.keep
+            ]
+
+        # Compute (col, row) positions
+        xs = [pos % cols for pos in range(len(ordered))]
+        ys = [pos // cols for pos in range(len(ordered))]
+
+        # Build one trace per feed×status (kept and rejected)
+        traces = []
+        for feed in all_feeds:
+            intense = feed_colour[feed]
+            muted = _muted_colour(intense)
+            for status, colour, label_suffix in [
+                (True, intense, " kept"),
+                (False, muted, " rejected"),
+            ]:
+                indices = [
+                    i
+                    for i, (r, _) in enumerate(ordered)
+                    if r.entry.feed_name == feed and r.keep == status
+                ]
+                if not indices:
+                    continue
+                trace_name = feed + label_suffix
+                traces.append(
+                    {
+                        "type": "scatter",
+                        "mode": "markers",
+                        "name": feed,
+                        "legendgroup": feed,
+                        "showlegend": showlegend and (status is True),
+                        "x": [xs[i] for i in indices],
+                        "y": [ys[i] for i in indices],
+                        "marker": {
+                            "color": colour,
+                            "size": dot_size,
+                            "opacity": 0.85,
+                            "line": {"color": "rgba(0,0,0,0)", "width": 0},
+                        },
+                        "hovertemplate": f"{trace_name}<extra></extra>",
+                        "xaxis": xax,
+                        "yaxis": yax,
+                    }
+                )
+        return traces
 
     # --- Vault-fitted UMAP transform per group ---
     def _vault_umap_traces(matrix, kept, hovers, xax, yax, urls=None):
@@ -398,11 +426,11 @@ def write_score_viz(
 
     all_traces: list[dict] = []
 
-    # Row 1 — Reading bar chart (x1/y1)
-    all_traces += _feed_bar_traces(reading_pairs, "x1", "y1")
+    # Row 1 — Reading dot grid (x1/y1)
+    all_traces += _feed_dot_traces(reading_pairs, "x1", "y1")
 
-    # Row 2 — arXiv bar chart (x3/y3)
-    all_traces += _feed_bar_traces(arxiv_pairs, "x3", "y3", showlegend=False)
+    # Row 2 — arXiv dot grid (x3/y3)
+    all_traces += _feed_dot_traces(arxiv_pairs, "x3", "y3", showlegend=False)
 
     # Vault-fitted UMAP traces
     all_traces += _vault_umap_traces(
@@ -428,24 +456,35 @@ def write_score_viz(
     layout = {
         "title": {"text": f"RSS Score Analysis — {today} ({n_kept}/{n_total} kept)"},
         "hovermode": "closest",
-        "barmode": "stack",
-        # Row 1 — Reading (bar axes fixed so zoom/pan only affects UMAP panels)
-        "xaxis": {"domain": LEFT_X, "anchor": "y1", "fixedrange": True},
+        # Row 1 — Reading dot grid (x1/y1)
+        "xaxis": {
+            "domain": LEFT_X,
+            "anchor": "y1",
+            "fixedrange": True,
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+        },
         "yaxis": {
             "domain": TOP_Y,
             "anchor": "x1",
             "title": "Reading",
             "fixedrange": True,
             "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+            "autorange": "reversed",
         },
         "xaxis2": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y2"},
         "yaxis2": {"domain": TOP_Y, "title": "UMAP dim 2", "anchor": "x2"},
-        # Row 2 — arXiv
+        # Row 2 — arXiv dot grid (x3/y3)
         "xaxis3": {
             "domain": LEFT_X,
-            "title": "Entry count",
             "anchor": "y3",
             "fixedrange": True,
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
         },
         "yaxis3": {
             "domain": BOT_Y,
@@ -453,6 +492,9 @@ def write_score_viz(
             "title": "arXiv",
             "fixedrange": True,
             "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+            "autorange": "reversed",
         },
         "xaxis4": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y4"},
         "yaxis4": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x4"},

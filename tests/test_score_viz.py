@@ -236,9 +236,9 @@ class TestWriteScoreViz:
         results = reading + arxiv
         metadata = [_meta(r.score) for r in results]
         umap_reducer = MagicMock()
-        umap_reducer.transform.return_value = np.random.rand(len(results), 2).astype(
-            np.float32
-        )
+        umap_reducer.transform.return_value = np.random.rand(
+            max(len(results), 1), 2
+        ).astype(np.float32)
         out = tmp_path / "RSS-2024-01-01-scores.html"
         write_score_viz(
             results=results,
@@ -274,115 +274,143 @@ class TestWriteScoreViz:
         xaxis_keys = [k for k in layout if k.startswith("xaxis")]
         assert len(xaxis_keys) == 4, f"Expected 4 xaxis keys, got {xaxis_keys}"
 
-    def test_no_scatter_on_x1(self, tmp_path):
-        """x1/x3 axes must not carry scatter traces (they are bar chart axes now)."""
+    def test_no_bar_traces_on_x1(self, tmp_path):
+        """x1/x3 axes must not carry bar traces — dot grid uses scatter."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
-        assert traces_match, "Could not find traces JSON in HTML"
+        assert traces_match
         traces = json.loads(traces_match.group(1))
-        scatter_on_bar_axes = [
+        bar_on_dot_axes = [
             t
             for t in traces
-            if t.get("type") == "scatter" and t.get("xaxis") in ("x1", "x3")
+            if t.get("type") == "bar" and t.get("xaxis") in ("x1", "x3")
         ]
-        assert not scatter_on_bar_axes, (
-            f"Unexpected scatter on bar axes: {scatter_on_bar_axes}"
+        assert not bar_on_dot_axes, (
+            f"Unexpected bar traces on dot axes: {bar_on_dot_axes}"
         )
 
-    def test_bar_traces_present_for_reading(self, tmp_path):
-        """Bar traces for the reading row must be present on x1."""
-        out = self._mixed_call(tmp_path)
-        html = out.read_text()
-        traces_match = re.search(
-            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
-        )
-        assert traces_match, "Could not find traces JSON in HTML"
-        traces = json.loads(traces_match.group(1))
-        bar_traces = [
-            t for t in traces if t.get("type") == "bar" and t.get("xaxis") == "x1"
-        ]
-        assert bar_traces, "Expected bar traces on x1 for reading row"
-
-    def test_bar_traces_present_for_arxiv(self, tmp_path):
-        """Bar traces for the arXiv row must be present on x3."""
-        out = self._mixed_call(tmp_path)
-        html = out.read_text()
-        traces_match = re.search(
-            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
-        )
-        assert traces_match, "Could not find traces JSON in HTML"
-        traces = json.loads(traces_match.group(1))
-        bar_traces = [
-            t for t in traces if t.get("type") == "bar" and t.get("xaxis") == "x3"
-        ]
-        assert bar_traces, "Expected bar traces on x3 for arXiv row"
-
-    def test_bar_traces_contain_feed_names(self, tmp_path):
-        """Bar chart y-axis values must include the feed name from the entries."""
+    def test_dot_traces_present_for_reading(self, tmp_path):
+        """Scatter traces for the reading row must be present on x1."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
         traces = json.loads(traces_match.group(1))
-        bar_traces = [t for t in traces if t.get("type") == "bar"]
-        all_y = [y for t in bar_traces for y in (t.get("y") or [])]
-        # _mixed_call uses feed_name="Test Feed"
-        assert "Test Feed" in all_y, (
-            f"Expected 'Test Feed' in bar y values, got {all_y}"
-        )
+        dot_traces = [
+            t for t in traces if t.get("type") == "scatter" and t.get("xaxis") == "x1"
+        ]
+        assert dot_traces, "Expected scatter dot traces on x1 for reading row"
 
-    def test_bar_kept_colour_green(self, tmp_path):
-        """Kept bar segment must use green colour #2ecc71."""
+    def test_dot_traces_present_for_arxiv(self, tmp_path):
+        """Scatter traces for the arXiv row must be present on x3."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
         traces = json.loads(traces_match.group(1))
-        kept_bars = [
-            t for t in traces if t.get("type") == "bar" and "Kept" in t.get("name", "")
+        dot_traces = [
+            t for t in traces if t.get("type") == "scatter" and t.get("xaxis") == "x3"
         ]
-        assert kept_bars, "No kept bar traces found"
-        for t in kept_bars:
-            assert t["marker"]["color"] == "#2ecc71", (
-                f"Expected #2ecc71, got {t['marker']['color']}"
+        assert dot_traces, "Expected scatter dot traces on x3 for arXiv row"
+
+    def test_dot_traces_x_positions_wrap_at_20_columns(self, tmp_path):
+        """Dot x positions must be in range [0, 19] (20-column wrap)."""
+        out = self._mixed_call(tmp_path, n_reading=25, n_arxiv=0)
+        html = out.read_text()
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        dot_traces = [
+            t for t in traces if t.get("type") == "scatter" and t.get("xaxis") == "x1"
+        ]
+        all_x = [x for t in dot_traces for x in t.get("x", [])]
+        assert all_x, "No x positions found on x1 dot traces"
+        assert max(all_x) <= 19, f"Max x should be <=19, got {max(all_x)}"
+        assert min(all_x) >= 0
+
+    def test_dot_size_10px_for_small_feed(self, tmp_path):
+        """Dot marker size must be 10 when total entries <= 200."""
+        out = self._mixed_call(tmp_path, n_reading=4, n_arxiv=0)
+        html = out.read_text()
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        dot_traces = [
+            t for t in traces if t.get("type") == "scatter" and t.get("xaxis") == "x1"
+        ]
+        for t in dot_traces:
+            assert t["marker"]["size"] == 10, (
+                f"Expected size 10, got {t['marker']['size']}"
             )
 
+    def test_dot_size_6px_for_large_feed(self, tmp_path):
+        """Dot marker size must be 6 when total entries > 200."""
+        out = self._mixed_call(tmp_path, n_reading=201, n_arxiv=0)
+        html = out.read_text()
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        dot_traces = [
+            t for t in traces if t.get("type") == "scatter" and t.get("xaxis") == "x1"
+        ]
+        for t in dot_traces:
+            assert t["marker"]["size"] == 6, (
+                f"Expected size 6, got {t['marker']['size']}"
+            )
+
+    def test_dot_traces_feed_names_in_legend(self, tmp_path):
+        """Each feed must appear as a named legend entry in the dot traces."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        dot_traces = [
+            t for t in traces if t.get("type") == "scatter" and t.get("xaxis") == "x1"
+        ]
+        names = [t.get("name", "") for t in dot_traces]
+        assert any("Test Feed" in n for n in names), (
+            f"Expected 'Test Feed' in dot trace names, got {names}"
+        )
+
     def test_reading_entries_in_reading_row(self, tmp_path):
-        """Reading article titles must appear in traces assigned to the reading row."""
+        """Reading feed name must appear in traces assigned to the reading row."""
         out = self._mixed_call(tmp_path, n_reading=2, n_arxiv=2)
         html = out.read_text()
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
         traces = json.loads(traces_match.group(1))
-        # Reading row uses x1 (bar) and x2 (UMAP)
         reading_row_text = " ".join(
-            str(t.get("text", "") or "") + " ".join(str(v) for v in (t.get("y") or []))
+            str(t.get("name", "")) + str(t.get("hovertemplate", ""))
             for t in traces
             if t.get("xaxis") in ("x1", "x2")
         )
-        assert "Reading 0" in reading_row_text
+        assert "Test Feed" in reading_row_text
 
     def test_arxiv_entries_in_arxiv_row(self, tmp_path):
-        """arXiv article titles must appear in traces assigned to the arXiv row."""
+        """arXiv feed name must appear in traces assigned to the arXiv row."""
         out = self._mixed_call(tmp_path, n_reading=2, n_arxiv=2)
         html = out.read_text()
         traces_match = re.search(
             r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
         )
         traces = json.loads(traces_match.group(1))
-        # arXiv row uses x3 (bar) and x4 (UMAP)
         arxiv_row_text = " ".join(
-            str(t.get("text", "") or "") + " ".join(str(v) for v in (t.get("y") or []))
+            str(t.get("name", "")) + str(t.get("hovertemplate", ""))
             for t in traces
             if t.get("xaxis") in ("x3", "x4")
         )
-        assert "Arxiv 0" in arxiv_row_text
+        assert "Test Feed" in arxiv_row_text
 
     def test_umap_traces_have_customdata(self, tmp_path):
         """UMAP scatter traces for RSS entries must include customdata (URLs)."""
