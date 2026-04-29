@@ -70,14 +70,16 @@ def _render_click_listener_block() -> str:
         "  attr: { style: 'padding: 4px 0; font-size: 13px; min-height: 20px;' }\n"
         "});\n"
         "el.setText('Click a point in the chart above to open an article.');\n"
-        "window.addEventListener('message', (event) => {\n"
+        "const handler = (event) => {\n"
         "  if (!event.data || event.data.type !== 'rss-viz-click') return;\n"
         "  const { url, title } = event.data;\n"
         "  el.empty();\n"
         "  el.createEl('span', { text: '\\u2192 ', attr: { style: 'color: #a6adc8;' } });\n"
         "  el.createEl('a', { text: title || url, href: url,\n"
         "    attr: { style: 'color: #89b4fa;' } });\n"
-        "});\n"
+        "};\n"
+        "window.addEventListener('message', handler);\n"
+        "this.register(() => window.removeEventListener('message', handler));\n"
     )
     return f"```dataviewjs\n{js}```\n"
 

@@ -338,4 +338,4 @@ def test_build_note_content_click_listener_renders_link():
     content = build_note_content(
         [], [], date="2025-01-15", viz_filename="RSS-2025-01-15-scores.html"
     )
-    assert "createEl" in content
+    assert "createEl('a'" in content
