@@ -465,11 +465,12 @@ def write_score_viz(
     var div = document.getElementById('chart');
     Plotly.newPlot(div, traces, layout, {{responsive: true}});
     div.on('plotly_click', function(data) {{
+      if (!data.points || !data.points.length) return;
       var pt = data.points[0];
       var url = pt.customdata;
       if (!url) return;
       var title = pt.text ? pt.text.replace(/<[^>]+>/g, '').split('\\n')[0] : url;
-      window.parent.postMessage({{ type: 'rss-viz-click', url: url, title: title }}, '*');
+      window.parent.postMessage({{ type: 'rss-viz-click', url: url, title: title }}, '*');  // '*' is intentional: Obsidian iframe has unknown origin
     }});
   </script>
 </body>
