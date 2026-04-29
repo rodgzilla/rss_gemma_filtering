@@ -43,18 +43,19 @@ _FEED_PALETTE = [
 ]
 
 
-def _muted_colour(hex_colour: str, blend: float = 0.4) -> str:
+def _muted_colour(hex_colour: str, keep: float = 0.4) -> str:
     """Return a paler version of *hex_colour* by blending toward #cccccc.
 
-    *blend* = fraction of the original hue to keep (0 = all grey, 1 = original).
+    *keep* = fraction of the original hue to keep (0.0 = all grey, 1.0 = original colour).
+    Default 0.4 keeps 40% of the original hue.
     """
     base = 0xCC
     r = int(hex_colour[1:3], 16)
     g = int(hex_colour[3:5], 16)
     b = int(hex_colour[5:7], 16)
-    mr = round(r * blend + base * (1 - blend))
-    mg = round(g * blend + base * (1 - blend))
-    mb = round(b * blend + base * (1 - blend))
+    mr = round(r * keep + base * (1 - keep))
+    mg = round(g * keep + base * (1 - keep))
+    mb = round(b * keep + base * (1 - keep))
     return f"#{mr:02x}{mg:02x}{mb:02x}"
 
 

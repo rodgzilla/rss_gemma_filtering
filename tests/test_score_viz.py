@@ -33,6 +33,18 @@ def test_muted_colour_returns_hex_string():
     assert len(muted) == 7
 
 
+def test_muted_colour_keep_zero_returns_grey():
+    """keep=0.0 should return #cccccc."""
+    result = _muted_colour("#e74c3c", keep=0.0)
+    assert result == "#cccccc"
+
+
+def test_muted_colour_keep_one_returns_original():
+    """keep=1.0 should return the original colour."""
+    result = _muted_colour("#2980b9", keep=1.0)
+    assert result == "#2980b9"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
