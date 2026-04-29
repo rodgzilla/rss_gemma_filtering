@@ -10,7 +10,27 @@ from unittest.mock import MagicMock
 import numpy as np
 
 from rss_filter.models import FilterResult, RSSEntry
-from rss_filter.score_viz import write_score_viz
+from rss_filter.score_viz import _muted_colour, _FEED_PALETTE, write_score_viz
+
+
+def test_feed_palette_has_ten_entries():
+    assert len(_FEED_PALETTE) == 10
+
+
+def test_muted_colour_is_paler():
+    """Muted colour should be closer to #cccccc than the original."""
+    intense = "#2980b9"  # blue: r=0x29=41, g=0x80=128, b=0xb9=185
+    muted = _muted_colour(intense)
+    # Muted red component should be higher than intense red (blended toward #cccccc=204)
+    r_intense = int(intense[1:3], 16)
+    r_muted = int(muted[1:3], 16)
+    assert r_muted > r_intense
+
+
+def test_muted_colour_returns_hex_string():
+    muted = _muted_colour("#2980b9")
+    assert muted.startswith("#")
+    assert len(muted) == 7
 
 
 # ---------------------------------------------------------------------------

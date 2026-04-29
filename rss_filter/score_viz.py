@@ -26,6 +26,39 @@ from rss_filter.models import FilterResult
 from rss_filter.score_filter import MATRYOSHKA_DIM
 
 # ---------------------------------------------------------------------------
+# Per-feed dot grid colour palette
+# ---------------------------------------------------------------------------
+
+_FEED_PALETTE = [
+    "#e74c3c",  # red
+    "#e67e22",  # orange
+    "#f1c40f",  # yellow
+    "#27ae60",  # green
+    "#1abc9c",  # teal
+    "#2980b9",  # blue
+    "#8e44ad",  # purple
+    "#d35400",  # dark orange
+    "#16a085",  # dark teal
+    "#c0392b",  # dark red
+]
+
+
+def _muted_colour(hex_colour: str, blend: float = 0.4) -> str:
+    """Return a paler version of *hex_colour* by blending toward #cccccc.
+
+    *blend* = fraction of the original hue to keep (0 = all grey, 1 = original).
+    """
+    base = 0xCC
+    r = int(hex_colour[1:3], 16)
+    g = int(hex_colour[3:5], 16)
+    b = int(hex_colour[5:7], 16)
+    mr = round(r * blend + base * (1 - blend))
+    mg = round(g * blend + base * (1 - blend))
+    mb = round(b * blend + base * (1 - blend))
+    return f"#{mr:02x}{mg:02x}{mb:02x}"
+
+
+# ---------------------------------------------------------------------------
 # UMAP caching
 # ---------------------------------------------------------------------------
 
