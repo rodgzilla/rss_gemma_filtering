@@ -217,6 +217,9 @@ def write_score_viz(
     r_scores, r_top1, r_kept, r_hovers, r_matrix = _group_arrays(reading_pairs)
     a_scores, a_top1, a_kept, a_hovers, a_matrix = _group_arrays(arxiv_pairs)
 
+    r_urls = [r.entry.url for r, _ in reading_pairs] if reading_pairs else []
+    a_urls = [r.entry.url for r, _ in arxiv_pairs] if arxiv_pairs else []
+
     kept_colour = "#2ecc71"
     rejected_colour = "#bdc3c7"
 
@@ -254,9 +257,11 @@ def write_score_viz(
             "yaxis": yax,
         }
 
-    def _umap_scatter(xy, mask, hovers, name, colour, xax, yax, showlegend=False):
+    def _umap_scatter(
+        xy, mask, hovers, name, colour, xax, yax, showlegend=False, urls=None
+    ):
         idx = np.where(mask)[0].tolist()
-        return {
+        trace = {
             "type": "scatter",
             "x": xy[mask, 0].tolist(),
             "y": xy[mask, 1].tolist(),
@@ -274,6 +279,9 @@ def write_score_viz(
             "xaxis": xax,
             "yaxis": yax,
         }
+        if urls is not None:
+            trace["customdata"] = [urls[i] for i in idx]
+        return trace
 
     def _feed_bar_traces(pairs, xax, yax):
         """Build kept + rejected horizontal bar traces for a group of (result, meta) pairs."""
@@ -318,7 +326,7 @@ def write_score_viz(
         return [kept_trace, rejected_trace]
 
     # --- Vault-fitted UMAP transform per group ---
-    def _vault_umap_traces(matrix, kept, hovers, xax, yax):
+    def _vault_umap_traces(matrix, kept, hovers, xax, yax, urls=None):
         traces = []
         if vault_2d_bg is not None and len(vault_2d_bg) > 0:
             traces.append(_vault_trace(xax, yax))
@@ -326,11 +334,20 @@ def write_score_viz(
             try:
                 xy = umap_reducer.transform(matrix).astype(np.float32)[: len(matrix)]
                 traces.append(
-                    _umap_scatter(xy, kept, hovers, "Kept", kept_colour, xax, yax)
+                    _umap_scatter(
+                        xy, kept, hovers, "Kept", kept_colour, xax, yax, urls=urls
+                    )
                 )
                 traces.append(
                     _umap_scatter(
-                        xy, ~kept, hovers, "Rejected", rejected_colour, xax, yax
+                        xy,
+                        ~kept,
+                        hovers,
+                        "Rejected",
+                        rejected_colour,
+                        xax,
+                        yax,
+                        urls=urls,
                     )
                 )
             except Exception as e:
@@ -346,8 +363,12 @@ def write_score_viz(
     all_traces += _feed_bar_traces(arxiv_pairs, "x3", "y3")
 
     # Vault-fitted UMAP traces
-    all_traces += _vault_umap_traces(r_matrix, r_kept, r_hovers, "x2", "y2")
-    all_traces += _vault_umap_traces(a_matrix, a_kept, a_hovers, "x4", "y4")
+    all_traces += _vault_umap_traces(
+        r_matrix, r_kept, r_hovers, "x2", "y2", urls=r_urls
+    )
+    all_traces += _vault_umap_traces(
+        a_matrix, a_kept, a_hovers, "x4", "y4", urls=a_urls
+    )
 
     traces_json = json.dumps(all_traces)
 
@@ -441,7 +462,15 @@ def write_score_viz(
   <script>
     var traces = {traces_json};
     var layout = {layout_json};
-    Plotly.newPlot('chart', traces, layout, {{responsive: true}});
+    var div = document.getElementById('chart');
+    Plotly.newPlot(div, traces, layout, {{responsive: true}});
+    div.on('plotly_click', function(data) {{
+      var pt = data.points[0];
+      var url = pt.customdata;
+      if (!url) return;
+      var title = pt.text ? pt.text.replace(/<[^>]+>/g, '').split('\\n')[0] : url;
+      window.parent.postMessage({{ type: 'rss-viz-click', url: url, title: title }}, '*');
+    }});
   </script>
 </body>
 </html>

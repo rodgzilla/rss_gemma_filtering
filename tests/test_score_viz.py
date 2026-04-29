@@ -236,7 +236,7 @@ class TestWriteScoreViz:
         """Layout must define 4 independent axis pairs for the 2×2 grid."""
         out = self._mixed_call(tmp_path)
         html = out.read_text()
-        layout_match = re.search(r"var layout = ({.*?});\s*Plotly", html, re.DOTALL)
+        layout_match = re.search(r"var layout = ({.*?});\s*var div", html, re.DOTALL)
         assert layout_match, "Could not find layout JSON in HTML"
         layout = json.loads(layout_match.group(1))
         xaxis_keys = [k for k in layout if k.startswith("xaxis")]
@@ -351,3 +351,38 @@ class TestWriteScoreViz:
             if t.get("xaxis") in ("x3", "x4")
         )
         assert "Arxiv 0" in arxiv_row_text
+
+    def test_umap_traces_have_customdata(self, tmp_path):
+        """UMAP scatter traces for RSS entries must include customdata (URLs)."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        assert traces_match, "Could not find traces JSON in HTML"
+        traces = json.loads(traces_match.group(1))
+        # UMAP RSS traces are on x2 (reading) and x4 (arXiv)
+        umap_rss_traces = [
+            t
+            for t in traces
+            if t.get("type") == "scatter"
+            and t.get("xaxis") in ("x2", "x4")
+            and t.get("name") in ("Kept", "Rejected")
+        ]
+        assert umap_rss_traces, "No UMAP RSS traces found on x2/x4"
+        for t in umap_rss_traces:
+            assert "customdata" in t, (
+                f"Trace {t.get('name')} on {t.get('xaxis')} missing customdata"
+            )
+            assert len(t["customdata"]) == len(t["x"]), (
+                "customdata length must match x length"
+            )
+
+    def test_html_contains_postmessage_click_handler(self, tmp_path):
+        """Generated HTML must include a plotly_click postMessage handler."""
+        out = self._mixed_call(tmp_path)
+        html = out.read_text()
+        assert "plotly_click" in html
+        assert "postMessage" in html
+        assert "rss-viz-click" in html
