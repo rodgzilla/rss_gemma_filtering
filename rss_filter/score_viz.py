@@ -309,6 +309,10 @@ def write_score_viz(
             "name": "Kept",
             "y": all_feeds,
             "x": kept_counts,
+            "text": all_feeds,
+            "textposition": "inside",
+            "insidetextanchor": "start",
+            "textfont": {"size": 11, "color": "#cdd6f4"},
             "marker": {"color": kept_colour, "opacity": 0.75},
             "xaxis": xax,
             "yaxis": yax,
@@ -320,6 +324,8 @@ def write_score_viz(
             "name": "Rejected",
             "y": all_feeds,
             "x": rejected_counts,
+            "text": ["" for _ in all_feeds],
+            "textposition": "inside",
             "marker": {"color": rejected_colour, "opacity": 0.4},
             "xaxis": xax,
             "yaxis": yax,
@@ -389,21 +395,38 @@ def write_score_viz(
         "title": {"text": f"RSS Score Analysis — {today} ({n_kept}/{n_total} kept)"},
         "hovermode": "closest",
         "barmode": "stack",
-        # Row 1 — Reading
-        "xaxis": {"domain": LEFT_X, "anchor": "y1"},
-        "yaxis": {"domain": TOP_Y, "anchor": "x1", "title": "Reading"},
+        # Row 1 — Reading (bar axes fixed so zoom/pan only affects UMAP panels)
+        "xaxis": {"domain": LEFT_X, "anchor": "y1", "fixedrange": True},
+        "yaxis": {
+            "domain": TOP_Y,
+            "anchor": "x1",
+            "title": "Reading",
+            "fixedrange": True,
+            "showticklabels": False,
+        },
         "xaxis2": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y2"},
         "yaxis2": {"domain": TOP_Y, "title": "UMAP dim 2", "anchor": "x2"},
         # Row 2 — arXiv
-        "xaxis3": {"domain": LEFT_X, "title": "Entry count", "anchor": "y3"},
-        "yaxis3": {"domain": BOT_Y, "anchor": "x3", "title": "arXiv"},
+        "xaxis3": {
+            "domain": LEFT_X,
+            "title": "Entry count",
+            "anchor": "y3",
+            "fixedrange": True,
+        },
+        "yaxis3": {
+            "domain": BOT_Y,
+            "anchor": "x3",
+            "title": "arXiv",
+            "fixedrange": True,
+            "showticklabels": False,
+        },
         "xaxis4": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y4"},
         "yaxis4": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x4"},
         "legend": {"orientation": "h", "y": -0.05, "x": 0.5, "xanchor": "center"},
         "paper_bgcolor": "#1e1e2e",
         "plot_bgcolor": "#2a2a3e",
         "font": {"color": "#cdd6f4"},
-        "margin": {"l": 160},
+        "margin": {"l": 20},
         "shapes": [],
         "annotations": [
             {
@@ -442,7 +465,7 @@ def write_score_viz(
       var pt = data.points[0];
       var url = pt.customdata;
       if (!url) return;
-      var title = pt.text ? pt.text.replace(/<[^>]+>/g, '').split('\\n')[0] : url;
+      var title = pt.text ? pt.text.replace(/<b>|<[/]b>/g, '').split('<br>')[0] : url;
       window.parent.postMessage({{ type: 'rss-viz-click', url: url, title: title }}, '*');  // '*' is intentional: Obsidian iframe has unknown origin
     }});
   </script>
