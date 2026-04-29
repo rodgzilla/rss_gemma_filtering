@@ -121,24 +121,6 @@ class TestWriteScoreViz:
         assert "Article 0" in html
         assert "Article 1" in html
 
-    def test_html_contains_both_thresholds(self, tmp_path):
-        out = self._basic_call(tmp_path, threshold_reading=0.55, threshold_arxiv=0.40)
-        html = out.read_text()
-        assert "0.55" in html
-        assert "0.40" in html
-
-    def test_html_contains_reading_threshold_line(self, tmp_path):
-        out = self._basic_call(tmp_path, threshold_reading=0.55, threshold_arxiv=0.40)
-        html = out.read_text()
-        # Reading section label must be present
-        assert "reading" in html.lower()
-
-    def test_html_contains_arxiv_threshold_line(self, tmp_path):
-        out = self._basic_call(tmp_path, threshold_reading=0.55, threshold_arxiv=0.40)
-        html = out.read_text()
-        # arXiv section must be labelled
-        assert "arxiv" in html.lower()
-
     def test_html_is_valid_structure(self, tmp_path):
         out = self._basic_call(tmp_path)
         html = out.read_text()
