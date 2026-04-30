@@ -13,6 +13,7 @@ UMAP for panel 3 is fitted fresh on each run directly from the RSS batch.
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
@@ -23,6 +24,46 @@ import umap
 from rss_filter.embedding_store import EmbeddingStore
 from rss_filter.models import FilterResult
 from rss_filter.score_filter import MATRYOSHKA_DIM
+
+# ---------------------------------------------------------------------------
+# Per-feed dot grid colour palette
+# ---------------------------------------------------------------------------
+
+_DOT_SIZE_THRESHOLD = 200  # switch to smaller dots above this article count
+_DOT_SIZE_LARGE_THRESHOLD = 500  # switch to even smaller dots above this count
+
+# 12 maximally-discriminable hues (evenly spaced in hue, alternating lightness)
+_FEED_PALETTE = [
+    "#e63946",  # vivid red
+    "#2196f3",  # vivid blue
+    "#2dc653",  # vivid green
+    "#ff9f1c",  # vivid amber
+    "#9b5de5",  # vivid violet
+    "#00b4d8",  # vivid cyan
+    "#f72585",  # vivid pink/magenta
+    "#a8dadc",  # pale aqua (light, distinct from cyan)
+    "#f4a261",  # warm peach (distinct from amber)
+    "#457b9d",  # steel blue (distinct from vivid blue)
+    "#6a994e",  # muted olive green (distinct from vivid green)
+    "#e9c46a",  # golden yellow (distinct from amber)
+]
+
+
+def _muted_colour(hex_colour: str, keep: float = 0.4) -> str:
+    """Return a paler version of *hex_colour* by blending toward #cccccc.
+
+    *keep* = fraction of the original hue to keep (0.0 = all grey, 1.0 = original colour).
+    Default 0.4 keeps 40% of the original hue.
+    """
+    base = 0xCC
+    r = int(hex_colour[1:3], 16)
+    g = int(hex_colour[3:5], 16)
+    b = int(hex_colour[5:7], 16)
+    mr = round(r * keep + base * (1 - keep))
+    mg = round(g * keep + base * (1 - keep))
+    mb = round(b * keep + base * (1 - keep))
+    return f"#{mr:02x}{mg:02x}{mb:02x}"
+
 
 # ---------------------------------------------------------------------------
 # UMAP caching
@@ -53,7 +94,8 @@ def build_or_load_umap(
     model_path: str,
     force_rebuild: bool = False,
     growth_threshold: float = 0.1,
-) -> tuple[umap.UMAP, np.ndarray, list[dict]]:
+    source_filter: str | None = None,
+) -> tuple[umap.UMAP | None, np.ndarray, list[dict]]:
     """Return a fitted UMAP model, the vault 2-D coordinates, and vault metadata.
 
     The fitted model and vault coordinates are cached to *model_path* and a
@@ -63,14 +105,24 @@ def build_or_load_umap(
     - The vault has grown by more than ``growth_threshold`` (fraction) since
       the model was last fitted.
 
+    Args:
+        source_filter: If set, only vault docs with ``source_note`` equal to
+                       this value are used (e.g. ``"arxiv"``).  Use ``None``
+                       (default) to use all vault docs.
+
     Returns:
-        reducer:        fitted umap.UMAP instance
+        reducer:        fitted umap.UMAP instance (None if < 2 docs)
         vault_2d:       np.ndarray of shape (N_vault, 2)
         vault_docs:     list of dicts {"url", "text", "source_note", "date"}
                         in the same order as vault_2d rows
     """
     vault_docs = store.get_all()
+    if source_filter is not None:
+        vault_docs = [d for d in vault_docs if d["source_note"] == source_filter]
     n_current = len(vault_docs)
+
+    if n_current < 2:
+        return None, np.zeros((n_current, 2), dtype=np.float32), []
 
     meta = _load_umap_meta(model_path)
     n_fitted = meta.get("n_vault_docs", 0)
@@ -171,6 +223,9 @@ def write_score_viz(
     threshold_arxiv: float,
     output_path: Path,
     vault_bg_max: int = 500,
+    arxiv_vault_2d: np.ndarray | None = None,
+    arxiv_vault_docs: list[dict] | None = None,
+    arxiv_umap_reducer=None,
 ) -> None:
     """Write a self-contained interactive HTML visualisation.
 
@@ -216,94 +271,34 @@ def write_score_viz(
     r_scores, r_top1, r_kept, r_hovers, r_matrix = _group_arrays(reading_pairs)
     a_scores, a_top1, a_kept, a_hovers, a_matrix = _group_arrays(arxiv_pairs)
 
+    r_urls = [r.entry.url for r, _ in reading_pairs] if reading_pairs else []
+    a_urls = [r.entry.url for r, _ in arxiv_pairs] if arxiv_pairs else []
+
     kept_colour = "#2ecc71"
     rejected_colour = "#bdc3c7"
-
-    # --- Scatter trace builder ---
-    def _scatter(scores, top1, kept, hovers, mask, name, colour, xax, yax):
-        idx = np.where(mask)[0].tolist()
-        return {
-            "type": "scatter",
-            "x": scores[mask].tolist(),
-            "y": top1[mask].tolist(),
-            "mode": "markers",
-            "name": name,
-            "marker": {"color": colour, "size": 8, "opacity": 0.4},
-            "text": [hovers[i] for i in idx],
-            "hovertemplate": "%{text}<extra></extra>",
-            "xaxis": xax,
-            "yaxis": yax,
-        }
-
-    all_traces: list[dict] = []
-
-    # Row 1 — Reading scatter (x1/y1)
-    if len(r_scores):
-        all_traces.append(
-            _scatter(
-                r_scores,
-                r_top1,
-                r_kept,
-                r_hovers,
-                r_kept,
-                "Kept",
-                kept_colour,
-                "x1",
-                "y1",
-            )
-        )
-        all_traces.append(
-            _scatter(
-                r_scores,
-                r_top1,
-                r_kept,
-                r_hovers,
-                ~r_kept,
-                "Rejected",
-                rejected_colour,
-                "x1",
-                "y1",
-            )
-        )
-
-    # Row 2 — arXiv scatter (x4/y4)
-    if len(a_scores):
-        all_traces.append(
-            _scatter(
-                a_scores,
-                a_top1,
-                a_kept,
-                a_hovers,
-                a_kept,
-                "Kept",
-                kept_colour,
-                "x4",
-                "y4",
-            )
-        )
-        all_traces.append(
-            _scatter(
-                a_scores,
-                a_top1,
-                a_kept,
-                a_hovers,
-                ~a_kept,
-                "Rejected",
-                rejected_colour,
-                "x4",
-                "y4",
-            )
-        )
 
     # --- Vault background (shared between rows) ---
     vault_2d_bg = vault_2d
     vault_docs_bg = vault_docs
+    rng = np.random.default_rng(seed=42)
     if len(vault_2d) > vault_bg_max:
-        rng = np.random.default_rng(seed=42)
         idx_bg = rng.choice(len(vault_2d), vault_bg_max, replace=False)
         idx_bg.sort()
         vault_2d_bg = vault_2d[idx_bg]
         vault_docs_bg = [vault_docs[i] for i in idx_bg]
+
+    # --- arXiv vault background (independent subsample) ---
+    if arxiv_vault_2d is not None and len(arxiv_vault_2d) > 0:
+        arxiv_vault_2d_bg = arxiv_vault_2d
+        arxiv_vault_docs_bg = arxiv_vault_docs or []
+        if len(arxiv_vault_2d) > vault_bg_max:
+            idx_abg = rng.choice(len(arxiv_vault_2d), vault_bg_max, replace=False)
+            idx_abg.sort()
+            arxiv_vault_2d_bg = arxiv_vault_2d[idx_abg]
+            arxiv_vault_docs_bg = [arxiv_vault_docs_bg[i] for i in idx_abg]
+    else:
+        arxiv_vault_2d_bg = vault_2d_bg  # fallback: reading vault (backward compat)
+        arxiv_vault_docs_bg = vault_docs_bg
 
     def _vault_trace(xax, yax):
         vault_hover = [
@@ -329,9 +324,34 @@ def write_score_viz(
             "yaxis": yax,
         }
 
-    def _umap_scatter(xy, mask, hovers, name, colour, xax, yax, showlegend=False):
-        idx = np.where(mask)[0].tolist()
+    def _arxiv_vault_trace(xax, yax):
+        hover = [
+            f"<b>{_truncate(d['text'], 100)}</b><br>Source: {d['source_note']}"
+            for d in arxiv_vault_docs_bg
+        ]
         return {
+            "type": "scatter",
+            "mode": "markers",
+            "name": "arXiv vault",
+            "x": arxiv_vault_2d_bg[:, 0].tolist(),
+            "y": arxiv_vault_2d_bg[:, 1].tolist(),
+            "marker": {
+                "color": "#bbbbbb",
+                "size": 4,
+                "opacity": 0.4,
+            },
+            "hovertemplate": "%{text}<extra></extra>",
+            "text": hover,
+            "showlegend": False,
+            "xaxis": xax,
+            "yaxis": yax,
+        }
+
+    def _umap_scatter(
+        xy, mask, hovers, name, colour, xax, yax, showlegend=False, urls=None
+    ):
+        idx = np.where(mask)[0].tolist()
+        trace = {
             "type": "scatter",
             "x": xy[mask, 0].tolist(),
             "y": xy[mask, 1].tolist(),
@@ -340,7 +360,7 @@ def write_score_viz(
             "showlegend": showlegend,
             "marker": {
                 "color": colour,
-                "size": 10,
+                "size": 6,
                 "opacity": 0.5,
                 "line": {"color": "white", "width": 1},
             },
@@ -349,48 +369,159 @@ def write_score_viz(
             "xaxis": xax,
             "yaxis": yax,
         }
+        if urls is not None:
+            trace["customdata"] = [urls[i] for i in idx]
+        return trace
+
+    def _feed_dot_traces(pairs, xax, yax, showlegend=True):
+        """Build unit dot grid scatter traces (one dot per article) for a row."""
+        if not pairs:
+            return []
+
+        cols = 20
+
+        # Count kept per feed
+        kept_by_feed: dict[str, int] = defaultdict(int)
+        for r, _ in pairs:
+            if r.keep:
+                kept_by_feed[r.entry.feed_name] += 1
+
+        all_feeds = sorted(
+            {r.entry.feed_name for r, _ in pairs},
+            key=lambda f: kept_by_feed[f],
+            reverse=True,
+        )
+
+        # Assign palette colour per feed
+        feed_colour = {
+            f: _FEED_PALETTE[i % len(_FEED_PALETTE)] for i, f in enumerate(all_feeds)
+        }
+
+        if len(pairs) > _DOT_SIZE_LARGE_THRESHOLD:
+            dot_size = 4
+        elif len(pairs) > _DOT_SIZE_THRESHOLD:
+            dot_size = 6
+        else:
+            dot_size = 8
+
+        # Group articles by feed and kept/rejected status in a single O(n) pass
+        feed_kept_items: dict[str, list] = {f: [] for f in all_feeds}
+        feed_rejected_items: dict[str, list] = {f: [] for f in all_feeds}
+        for r, m in pairs:
+            feed = r.entry.feed_name
+            if r.keep:
+                feed_kept_items[feed].append((r, m))
+            else:
+                feed_rejected_items[feed].append((r, m))
+
+        # Build ordered list: kept-count-desc feeds, kept then rejected within each
+        ordered = []
+        for feed in all_feeds:
+            ordered += feed_kept_items[feed]
+            ordered += feed_rejected_items[feed]
+
+        # Build position maps: feed×status → list of grid positions (O(n) total)
+        feed_kept_pos: dict[str, list[int]] = {f: [] for f in all_feeds}
+        feed_rejected_pos: dict[str, list[int]] = {f: [] for f in all_feeds}
+        for pos, (r, _) in enumerate(ordered):
+            feed = r.entry.feed_name
+            if r.keep:
+                feed_kept_pos[feed].append(pos)
+            else:
+                feed_rejected_pos[feed].append(pos)
+
+        def _pos_to_xy(positions: list[int]) -> tuple[list[int], list[int]]:
+            return [p % cols for p in positions], [p // cols for p in positions]
+
+        # Build traces
+        traces = []
+        for feed in all_feeds:
+            intense = feed_colour[feed]
+            muted = _muted_colour(intense)
+            for status_positions, colour, label_suffix, show in [
+                (feed_kept_pos[feed], intense, " kept", showlegend),
+                (feed_rejected_pos[feed], muted, " rejected", False),
+            ]:
+                if not status_positions:
+                    continue
+                hover_label = feed + label_suffix
+                x_vals, y_vals = _pos_to_xy(status_positions)
+                traces.append(
+                    {
+                        "type": "scatter",
+                        "mode": "markers",
+                        "name": feed,
+                        "legendgroup": feed,
+                        "showlegend": show,
+                        "x": x_vals,
+                        "y": y_vals,
+                        "marker": {
+                            "color": colour,
+                            "size": dot_size,
+                            "opacity": 0.85,
+                            "line": {"color": "rgba(0,0,0,0)", "width": 0},
+                        },
+                        "hovertemplate": f"{hover_label}<extra></extra>",
+                        "xaxis": xax,
+                        "yaxis": yax,
+                    }
+                )
+        return traces
 
     # --- Vault-fitted UMAP transform per group ---
-    def _vault_umap_traces(matrix, kept, hovers, xax, yax):
+    def _vault_umap_traces(matrix, kept, hovers, xax, yax, urls=None, use_arxiv=False):
         traces = []
-        if vault_2d_bg is not None and len(vault_2d_bg) > 0:
-            traces.append(_vault_trace(xax, yax))
-        if matrix is not None and umap_reducer is not None:
+        if use_arxiv:
+            bg_2d = arxiv_vault_2d_bg
+            reducer = (
+                arxiv_umap_reducer if arxiv_umap_reducer is not None else umap_reducer
+            )
+            if bg_2d is not None and len(bg_2d) > 0:
+                traces.append(_arxiv_vault_trace(xax, yax))
+        else:
+            bg_2d = vault_2d_bg
+            reducer = umap_reducer
+            if bg_2d is not None and len(bg_2d) > 0:
+                traces.append(_vault_trace(xax, yax))
+        if matrix is not None and reducer is not None:
             try:
-                xy = umap_reducer.transform(matrix).astype(np.float32)
+                xy = reducer.transform(matrix).astype(np.float32)[: len(matrix)]
                 traces.append(
-                    _umap_scatter(xy, kept, hovers, "Kept", kept_colour, xax, yax)
+                    _umap_scatter(
+                        xy, kept, hovers, "Kept", kept_colour, xax, yax, urls=urls
+                    )
                 )
                 traces.append(
                     _umap_scatter(
-                        xy, ~kept, hovers, "Rejected", rejected_colour, xax, yax
+                        xy,
+                        ~kept,
+                        hovers,
+                        "Rejected",
+                        rejected_colour,
+                        xax,
+                        yax,
+                        urls=urls,
                     )
                 )
             except Exception as e:
                 print(f"  [WARN] UMAP transform failed: {e}")
         return traces
 
-    all_traces += _vault_umap_traces(r_matrix, r_kept, r_hovers, "x2", "y2")
-    all_traces += _vault_umap_traces(a_matrix, a_kept, a_hovers, "x5", "y5")
+    all_traces: list[dict] = []
 
-    # --- RSS-only UMAP per group ---
-    def _rss_umap_traces(matrix, kept, hovers, xax, yax):
-        if matrix is None or len(matrix) < 2:
-            return []
-        try:
-            print("  Fitting UMAP on RSS entries only…")
-            rss_reducer = umap.UMAP(**_UMAP_PARAMS)
-            xy = rss_reducer.fit_transform(matrix).astype(np.float32)
-            return [
-                _umap_scatter(xy, kept, hovers, "Kept", kept_colour, xax, yax),
-                _umap_scatter(xy, ~kept, hovers, "Rejected", rejected_colour, xax, yax),
-            ]
-        except Exception as e:
-            print(f"  [WARN] RSS-only UMAP failed: {e}")
-            return []
+    # Row 1 — Reading dot grid (x1/y1)
+    all_traces += _feed_dot_traces(reading_pairs, "x1", "y1")
 
-    all_traces += _rss_umap_traces(r_matrix, r_kept, r_hovers, "x3", "y3")
-    all_traces += _rss_umap_traces(a_matrix, a_kept, a_hovers, "x6", "y6")
+    # Row 2 — arXiv dot grid (x3/y3)
+    all_traces += _feed_dot_traces(arxiv_pairs, "x3", "y3", showlegend=False)
+
+    # Vault-fitted UMAP traces
+    all_traces += _vault_umap_traces(
+        r_matrix, r_kept, r_hovers, "x2", "y2", urls=r_urls
+    )
+    all_traces += _vault_umap_traces(
+        a_matrix, a_kept, a_hovers, "x4", "y4", urls=a_urls, use_arxiv=True
+    )
 
     traces_json = json.dumps(all_traces)
 
@@ -398,128 +529,73 @@ def write_score_viz(
     n_kept = sum(r.keep for r in results)
     n_total = len(results)
 
-    # --- Layout: 2 rows × 3 columns ---
-    # y domains:  top row [0.55, 1.00], bottom row [0.00, 0.45]
-    # x domains:  left [0.00,0.30], mid [0.37,0.63], right [0.70,1.00]
+    # --- Layout: 2 rows × 2 columns ---
+    # LEFT_X starts at 0.20 to give room for long feed name labels on the y-axis.
     TOP_Y = [0.55, 1.00]
     BOT_Y = [0.00, 0.45]
-    LEFT_X = [0.00, 0.30]
-    MID_X = [0.37, 0.63]
-    RIGHT_X = [0.70, 1.00]
+    LEFT_X = [0.20, 0.48]
+    RIGHT_X = [0.55, 1.00]
 
     layout = {
         "title": {"text": f"RSS Score Analysis — {today} ({n_kept}/{n_total} kept)"},
         "hovermode": "closest",
-        # Row 1 — Reading
-        "xaxis": {"domain": LEFT_X, "title": "Aggregated score", "anchor": "y1"},
-        "yaxis": {"domain": TOP_Y, "title": "Top-1 similarity", "anchor": "x1"},
-        "xaxis2": {"domain": MID_X, "title": "UMAP dim 1", "anchor": "y2"},
+        # Row 1 — Reading dot grid (x1/y1)
+        "xaxis": {
+            "domain": LEFT_X,
+            "anchor": "y1",
+            "fixedrange": True,
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+        },
+        "yaxis": {
+            "domain": TOP_Y,
+            "anchor": "x1",
+            "title": "Reading",
+            "fixedrange": True,
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+            "autorange": "reversed",
+        },
+        "xaxis2": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y2"},
         "yaxis2": {"domain": TOP_Y, "title": "UMAP dim 2", "anchor": "x2"},
-        "xaxis3": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y3"},
-        "yaxis3": {"domain": TOP_Y, "title": "UMAP dim 2", "anchor": "x3"},
-        # Row 2 — arXiv
-        "xaxis4": {"domain": LEFT_X, "title": "Aggregated score", "anchor": "y4"},
-        "yaxis4": {"domain": BOT_Y, "title": "Top-1 similarity", "anchor": "x4"},
-        "xaxis5": {"domain": MID_X, "title": "UMAP dim 1", "anchor": "y5"},
-        "yaxis5": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x5"},
-        "xaxis6": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y6"},
-        "yaxis6": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x6"},
-        "legend": {"orientation": "h", "y": -0.05},
+        # Row 2 — arXiv dot grid (x3/y3)
+        "xaxis3": {
+            "domain": LEFT_X,
+            "anchor": "y3",
+            "fixedrange": True,
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+        },
+        "yaxis3": {
+            "domain": BOT_Y,
+            "anchor": "x3",
+            "title": "arXiv",
+            "fixedrange": True,
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+            "autorange": "reversed",
+        },
+        "xaxis4": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y4"},
+        "yaxis4": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x4"},
+        "legend": {"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
         "paper_bgcolor": "#1e1e2e",
         "plot_bgcolor": "#2a2a3e",
         "font": {"color": "#cdd6f4"},
-        "shapes": [
-            # Reading threshold (red, row 1 scatter)
-            {
-                "type": "line",
-                "xref": "x1",
-                "yref": "y1 domain",
-                "x0": threshold_reading,
-                "x1": threshold_reading,
-                "y0": 0,
-                "y1": 1,
-                "line": {"color": "#e74c3c", "width": 2, "dash": "dash"},
-            },
-            # arXiv threshold (orange, row 2 scatter)
-            {
-                "type": "line",
-                "xref": "x4",
-                "yref": "y4 domain",
-                "x0": threshold_arxiv,
-                "x1": threshold_arxiv,
-                "y0": 0,
-                "y1": 1,
-                "line": {"color": "#f39c12", "width": 2, "dash": "dash"},
-            },
-        ],
+        "margin": {"l": 20, "b": 80},
+        "shapes": [],
         "annotations": [
-            # --- Column headings (top of page) ---
-            {
-                "text": "Score vs Top-1 Similarity",
-                "xref": "paper",
-                "yref": "paper",
-                "x": 0.15,
-                "y": 1.04,
-                "showarrow": False,
-                "font": {"size": 12, "color": "#a6adc8"},
-            },
             {
                 "text": "UMAP — vault projection",
                 "xref": "paper",
                 "yref": "paper",
-                "x": 0.50,
+                "x": 0.775,
                 "y": 1.04,
                 "showarrow": False,
                 "font": {"size": 12, "color": "#a6adc8"},
-            },
-            {
-                "text": "UMAP — RSS entries only",
-                "xref": "paper",
-                "yref": "paper",
-                "x": 0.85,
-                "y": 1.04,
-                "showarrow": False,
-                "font": {"size": 12, "color": "#a6adc8"},
-            },
-            # --- Row labels ---
-            {
-                "text": "<b>Reading</b>",
-                "xref": "paper",
-                "yref": "paper",
-                "x": -0.01,
-                "y": (TOP_Y[0] + TOP_Y[1]) / 2,
-                "showarrow": False,
-                "textangle": -90,
-                "font": {"size": 13, "color": "#cdd6f4"},
-            },
-            {
-                "text": "<b>arXiv</b>",
-                "xref": "paper",
-                "yref": "paper",
-                "x": -0.01,
-                "y": (BOT_Y[0] + BOT_Y[1]) / 2,
-                "showarrow": False,
-                "textangle": -90,
-                "font": {"size": 13, "color": "#cdd6f4"},
-            },
-            # --- Threshold labels ---
-            {
-                "text": f"reading = {threshold_reading:.4f}",
-                "xref": "x1",
-                "yref": "y1 domain",
-                "x": threshold_reading,
-                "y": 0.97,
-                "showarrow": False,
-                "font": {"color": "#e74c3c", "size": 11},
-            },
-            {
-                "text": f"arxiv = {threshold_arxiv:.4f}",
-                "xref": "x4",
-                "yref": "y4 domain",
-                "x": threshold_arxiv,
-                "y": 0.97,
-                "showarrow": False,
-                "font": {"color": "#f39c12", "size": 11},
             },
         ],
     }
@@ -541,7 +617,16 @@ def write_score_viz(
   <script>
     var traces = {traces_json};
     var layout = {layout_json};
-    Plotly.newPlot('chart', traces, layout, {{responsive: true}});
+    var div = document.getElementById('chart');
+    Plotly.newPlot(div, traces, layout, {{responsive: true}});
+    div.on('plotly_click', function(data) {{
+      if (!data.points || !data.points.length) return;
+      var pt = data.points[0];
+      var url = pt.customdata;
+      if (!url) return;
+      var title = pt.text ? pt.text.replace(/<b>|<[/]b>/g, '').split('<br>')[0] : url;
+      window.parent.postMessage({{ type: 'rss-viz-click', url: url, title: title }}, '*');  // '*' is intentional: Obsidian iframe has unknown origin
+    }});
   </script>
 </body>
 </html>
