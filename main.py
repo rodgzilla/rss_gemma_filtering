@@ -151,6 +151,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     decay_lambda = args.decay_lambda or emb_cfg.get("decay_lambda", 1.0)
     umap_model_path = emb_cfg.get("umap_model_path", "umap_model.joblib")
+    arxiv_umap_model_path = emb_cfg.get(
+        "arxiv_umap_model_path", "umap_arxiv_model.joblib"
+    )
     umap_growth_threshold = emb_cfg.get("umap_growth_threshold", 0.1)
     vault_bg_max = args.vault_bg_max or emb_cfg.get("vault_bg_max", 500)
 
@@ -285,6 +288,13 @@ def main(argv: list[str] | None = None) -> None:
                 force_rebuild=args.rebuild_umap or args.rebuild_embeddings,
                 growth_threshold=umap_growth_threshold,
             )
+            arxiv_umap_reducer, arxiv_vault_2d, arxiv_vault_docs = build_or_load_umap(
+                store=store,
+                model_path=arxiv_umap_model_path,
+                force_rebuild=args.rebuild_umap or args.rebuild_embeddings,
+                growth_threshold=umap_growth_threshold,
+                source_filter="arxiv",
+            )
             viz_path = (
                 args.vault / vault_cfg["output_folder"] / f"RSS-{today}-scores.html"
             )
@@ -298,6 +308,9 @@ def main(argv: list[str] | None = None) -> None:
                 threshold_arxiv=threshold_arxiv,
                 output_path=viz_path,
                 vault_bg_max=vault_bg_max,
+                arxiv_vault_2d=arxiv_vault_2d,
+                arxiv_vault_docs=arxiv_vault_docs,
+                arxiv_umap_reducer=arxiv_umap_reducer,
             )
         except Exception as e:
             tqdm.write(f"  [WARN] Visualisation failed: {e}")
