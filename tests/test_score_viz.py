@@ -13,8 +13,8 @@ from rss_filter.models import FilterResult, RSSEntry
 from rss_filter.score_viz import _muted_colour, _FEED_PALETTE, write_score_viz
 
 
-def test_feed_palette_has_ten_entries():
-    assert len(_FEED_PALETTE) == 10
+def test_feed_palette_has_twelve_entries():
+    assert len(_FEED_PALETTE) == 12
 
 
 def test_muted_colour_is_paler():
@@ -334,8 +334,8 @@ class TestWriteScoreViz:
         assert max(all_x) <= 19, f"Max x should be <=19, got {max(all_x)}"
         assert min(all_x) >= 0
 
-    def test_dot_size_10px_for_small_feed(self, tmp_path):
-        """Dot marker size must be 10 when total entries <= 200."""
+    def test_dot_size_8px_for_small_feed(self, tmp_path):
+        """Dot marker size must be 8 when total entries <= 200."""
         out = self._mixed_call(tmp_path, n_reading=4, n_arxiv=0)
         html = out.read_text()
         traces_match = re.search(
@@ -346,12 +346,12 @@ class TestWriteScoreViz:
             t for t in traces if t.get("type") == "scatter" and t.get("xaxis") == "x1"
         ]
         for t in dot_traces:
-            assert t["marker"]["size"] == 10, (
-                f"Expected size 10, got {t['marker']['size']}"
+            assert t["marker"]["size"] == 8, (
+                f"Expected size 8, got {t['marker']['size']}"
             )
 
-    def test_dot_size_6px_for_large_feed(self, tmp_path):
-        """Dot marker size must be 6 when total entries > 200."""
+    def test_dot_size_6px_for_medium_feed(self, tmp_path):
+        """Dot marker size must be 6 when total entries > 200 and <= 500."""
         out = self._mixed_call(tmp_path, n_reading=201, n_arxiv=0)
         html = out.read_text()
         traces_match = re.search(
@@ -364,6 +364,22 @@ class TestWriteScoreViz:
         for t in dot_traces:
             assert t["marker"]["size"] == 6, (
                 f"Expected size 6, got {t['marker']['size']}"
+            )
+
+    def test_dot_size_4px_for_large_feed(self, tmp_path):
+        """Dot marker size must be 4 when total entries > 500."""
+        out = self._mixed_call(tmp_path, n_reading=501, n_arxiv=0)
+        html = out.read_text()
+        traces_match = re.search(
+            r"var traces = (\[.*?\]);\s*var layout", html, re.DOTALL
+        )
+        traces = json.loads(traces_match.group(1))
+        dot_traces = [
+            t for t in traces if t.get("type") == "scatter" and t.get("xaxis") == "x1"
+        ]
+        for t in dot_traces:
+            assert t["marker"]["size"] == 4, (
+                f"Expected size 4, got {t['marker']['size']}"
             )
 
     def test_dot_traces_feed_names_in_legend(self, tmp_path):

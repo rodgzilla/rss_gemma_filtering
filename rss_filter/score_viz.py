@@ -30,18 +30,22 @@ from rss_filter.score_filter import MATRYOSHKA_DIM
 # ---------------------------------------------------------------------------
 
 _DOT_SIZE_THRESHOLD = 200  # switch to smaller dots above this article count
+_DOT_SIZE_LARGE_THRESHOLD = 500  # switch to even smaller dots above this count
 
+# 12 maximally-discriminable hues (evenly spaced in hue, alternating lightness)
 _FEED_PALETTE = [
-    "#e74c3c",  # red
-    "#e67e22",  # orange
-    "#f1c40f",  # yellow
-    "#27ae60",  # green
-    "#1abc9c",  # teal
-    "#2980b9",  # blue
-    "#8e44ad",  # purple
-    "#d35400",  # dark orange
-    "#16a085",  # dark teal
-    "#c0392b",  # dark red
+    "#e63946",  # vivid red
+    "#2196f3",  # vivid blue
+    "#2dc653",  # vivid green
+    "#ff9f1c",  # vivid amber
+    "#9b5de5",  # vivid violet
+    "#00b4d8",  # vivid cyan
+    "#f72585",  # vivid pink/magenta
+    "#a8dadc",  # pale aqua (light, distinct from cyan)
+    "#f4a261",  # warm peach (distinct from amber)
+    "#457b9d",  # steel blue (distinct from vivid blue)
+    "#6a994e",  # muted olive green (distinct from vivid green)
+    "#e9c46a",  # golden yellow (distinct from amber)
 ]
 
 
@@ -306,7 +310,7 @@ def write_score_viz(
             "showlegend": showlegend,
             "marker": {
                 "color": colour,
-                "size": 10,
+                "size": 6,
                 "opacity": 0.5,
                 "line": {"color": "white", "width": 1},
             },
@@ -343,7 +347,12 @@ def write_score_viz(
             f: _FEED_PALETTE[i % len(_FEED_PALETTE)] for i, f in enumerate(all_feeds)
         }
 
-        dot_size = 6 if len(pairs) > _DOT_SIZE_THRESHOLD else 10
+        if len(pairs) > _DOT_SIZE_LARGE_THRESHOLD:
+            dot_size = 4
+        elif len(pairs) > _DOT_SIZE_THRESHOLD:
+            dot_size = 6
+        else:
+            dot_size = 8
 
         # Group articles by feed and kept/rejected status in a single O(n) pass
         feed_kept_items: dict[str, list] = {f: [] for f in all_feeds}
@@ -512,11 +521,11 @@ def write_score_viz(
         },
         "xaxis4": {"domain": RIGHT_X, "title": "UMAP dim 1", "anchor": "y4"},
         "yaxis4": {"domain": BOT_Y, "title": "UMAP dim 2", "anchor": "x4"},
-        "legend": {"orientation": "h", "y": -0.05, "x": 0.5, "xanchor": "center"},
+        "legend": {"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
         "paper_bgcolor": "#1e1e2e",
         "plot_bgcolor": "#2a2a3e",
         "font": {"color": "#cdd6f4"},
-        "margin": {"l": 20},
+        "margin": {"l": 20, "b": 80},
         "shapes": [],
         "annotations": [
             {
