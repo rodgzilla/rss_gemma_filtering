@@ -20,6 +20,20 @@
       <outline text="Wired" type="rss" xmlUrl="https://www.wired.com/feed" htmlUrl="https://www.wired.com/latest" description="Channel Description"/>
     </outline>
     <outline text="Data science">
+      <outline text="3Blue1Brown" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCYO_jab_esuFRV4b17AJtAw" htmlUrl="https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw" description=""/>
+      <outline text="Andrej Karpathy" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCXUPKJO5MZQN11PqgIvyuvQ" htmlUrl="https://www.youtube.com/channel/UCXUPKJO5MZQN11PqgIvyuvQ" description=""/>
+      <outline text="Bread on Penguins" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCwHwDuNd9lCdA7chyyquDXw" htmlUrl="https://www.youtube.com/channel/UCwHwDuNd9lCdA7chyyquDXw" description=""/>
+      <outline text="bycloud" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCgfe2ooZD3VJPB6aJAnuQng" htmlUrl="https://www.youtube.com/channel/UCgfe2ooZD3VJPB6aJAnuQng" description=""/>
+      <outline text="Coffeezilla" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCFQMnBA3CS502aghlcr0_aw" htmlUrl="https://www.youtube.com/channel/UCFQMnBA3CS502aghlcr0_aw" description=""/>
+      <outline text="colah's blog" type="rss" xmlUrl="http://colah.github.io/rss.xml" htmlUrl="http://colah.github.io/" description=""/>
+      <outline text="Computerphile" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UC9-y-6csu5WGm29I7JiwpnA" htmlUrl="https://www.youtube.com/channel/UC9-y-6csu5WGm29I7JiwpnA" description=""/>
+      <outline text="DEFCONConference" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UC6Om9kAkl32dWlDSNlDS9Iw" htmlUrl="https://www.youtube.com/channel/UC6Om9kAkl32dWlDSNlDS9Iw" description=""/>
+      <outline text="Domain of Science" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCxqAWLTk1CmBvZFPzeZMd9A" htmlUrl="https://www.youtube.com/channel/UCxqAWLTk1CmBvZFPzeZMd9A" description=""/>
+      <outline text="EuroPython Conference" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UC98CzaYuFNAA_gOINFB0e4Q" htmlUrl="https://www.youtube.com/channel/UC98CzaYuFNAA_gOINFB0e4Q" description=""/>
+      <outline text="Fireship" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA" htmlUrl="https://www.youtube.com/channel/UCsBjURrPoezykLs9EqgamOA" description=""/>
+      <outline text="StatQuest with Josh Starmer" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCtYLUTtgS3k1Fg4y5tAhLbw" htmlUrl="https://www.youtube.com/channel/UCtYLUTtgS3k1Fg4y5tAhLbw" description=""/>
+      <outline text="Two Minute Papers" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCbfYPyITQ-7l4upoX8nvctg" htmlUrl="https://www.youtube.com/channel/UCbfYPyITQ-7l4upoX8nvctg" description=""/>
+      <outline text="Yannic Kilcher" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCZHmQk67mSJgfCCTn7xBfew" htmlUrl="https://www.youtube.com/channel/UCZHmQk67mSJgfCCTn7xBfew" description=""/>
       <outline text="Andrej Karpathy blog" type="rss" xmlUrl="http://karpathy.github.io/feed.xml" htmlUrl="http://karpathy.github.io/" description="Musings of a Computer Scientist."/>
       <outline text="Datablog | The Guardian" type="rss" xmlUrl="https://www.theguardian.com/news/datablog/rss" htmlUrl="https://www.theguardian.com/news/datablog" description="Data journalism and data visualization from the Guardian"/>
       <outline text="Data Science 101" type="rss" xmlUrl="https://ryanswanstrom.com/feed/" htmlUrl="https://101.datascience.community" description="Data Leader &amp; Content Creator"/>
@@ -69,22 +83,6 @@
       <outline text="top scoring links : ObsidianMD" type="rss" xmlUrl="https://www.reddit.com/r/ObsidianMd/top/.rss?t=day&amp;limit=3&amp;sort=new" htmlUrl="https://www.reddit.com/r/ObsidianMd/top/?t=day&amp;limit=3&amp;sort=new" description="Subreddit for the Obsidian notes app https://obsidian.md"/>
       <outline text="Wait But Why" type="rss" xmlUrl="https://waitbutwhy.com/feed" htmlUrl="https://waitbutwhy.com" description=""/>
       <outline text="Web3 is Going Just Great" type="rss" xmlUrl="https://www.web3isgoinggreat.com/feed.xml" htmlUrl="https://web3isgoinggreat.com/" description=""/>
-    </outline>
-    <outline text="Youtube">
-      <outline text="3Blue1Brown" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCYO_jab_esuFRV4b17AJtAw" htmlUrl="https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw" description=""/>
-      <outline text="Andrej Karpathy" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCXUPKJO5MZQN11PqgIvyuvQ" htmlUrl="https://www.youtube.com/channel/UCXUPKJO5MZQN11PqgIvyuvQ" description=""/>
-      <outline text="Bread on Penguins" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCwHwDuNd9lCdA7chyyquDXw" htmlUrl="https://www.youtube.com/channel/UCwHwDuNd9lCdA7chyyquDXw" description=""/>
-      <outline text="bycloud" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCgfe2ooZD3VJPB6aJAnuQng" htmlUrl="https://www.youtube.com/channel/UCgfe2ooZD3VJPB6aJAnuQng" description=""/>
-      <outline text="Coffeezilla" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCFQMnBA3CS502aghlcr0_aw" htmlUrl="https://www.youtube.com/channel/UCFQMnBA3CS502aghlcr0_aw" description=""/>
-      <outline text="colah's blog" type="rss" xmlUrl="http://colah.github.io/rss.xml" htmlUrl="http://colah.github.io/" description=""/>
-      <outline text="Computerphile" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UC9-y-6csu5WGm29I7JiwpnA" htmlUrl="https://www.youtube.com/channel/UC9-y-6csu5WGm29I7JiwpnA" description=""/>
-      <outline text="DEFCONConference" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UC6Om9kAkl32dWlDSNlDS9Iw" htmlUrl="https://www.youtube.com/channel/UC6Om9kAkl32dWlDSNlDS9Iw" description=""/>
-      <outline text="Domain of Science" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCxqAWLTk1CmBvZFPzeZMd9A" htmlUrl="https://www.youtube.com/channel/UCxqAWLTk1CmBvZFPzeZMd9A" description=""/>
-      <outline text="EuroPython Conference" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UC98CzaYuFNAA_gOINFB0e4Q" htmlUrl="https://www.youtube.com/channel/UC98CzaYuFNAA_gOINFB0e4Q" description=""/>
-      <outline text="Fireship" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA" htmlUrl="https://www.youtube.com/channel/UCsBjURrPoezykLs9EqgamOA" description=""/>
-      <outline text="StatQuest with Josh Starmer" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCtYLUTtgS3k1Fg4y5tAhLbw" htmlUrl="https://www.youtube.com/channel/UCtYLUTtgS3k1Fg4y5tAhLbw" description=""/>
-      <outline text="Two Minute Papers" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCbfYPyITQ-7l4upoX8nvctg" htmlUrl="https://www.youtube.com/channel/UCbfYPyITQ-7l4upoX8nvctg" description=""/>
-      <outline text="Yannic Kilcher" type="rss" xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCZHmQk67mSJgfCCTn7xBfew" htmlUrl="https://www.youtube.com/channel/UCZHmQk67mSJgfCCTn7xBfew" description=""/>
     </outline>
   </body>
 </opml>
