@@ -10,7 +10,12 @@ from unittest.mock import MagicMock
 import numpy as np
 
 from rss_filter.models import FilterResult, RSSEntry
-from rss_filter.score_viz import _muted_colour, _FEED_PALETTE, write_score_viz
+from rss_filter.score_viz import (
+    _muted_colour,
+    _FEED_PALETTE,
+    write_score_viz,
+    build_or_load_umap,
+)
 
 
 def test_feed_palette_has_twelve_entries():
@@ -462,3 +467,81 @@ class TestWriteScoreViz:
         assert "plotly_click" in html
         assert "postMessage" in html
         assert "rss-viz-click" in html
+
+
+# ---------------------------------------------------------------------------
+# build_or_load_umap with source_filter
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_store(docs: list[dict]):
+    """Return a MagicMock store whose get_all() returns docs."""
+    store = MagicMock()
+    store.get_all.return_value = docs
+    return store
+
+
+def _fake_vault_docs(n: int, source: str = "reading") -> list[dict]:
+    """Return n fake vault docs with embeddings, tagged with source."""
+    return [
+        {
+            "url": f"http://vault.com/{source}/{i}",
+            "text": f"Vault {source} doc {i}",
+            "source_note": source,
+            "date": "2024-01-01",
+            "embedding": np.random.rand(256).astype(np.float32),
+        }
+        for i in range(n)
+    ]
+
+
+class TestBuildOrLoadUmapSourceFilter:
+    def test_source_filter_arxiv_only_fits_arxiv_docs(self, tmp_path):
+        """With source_filter='arxiv', only arXiv docs are used."""
+        reading_docs = _fake_vault_docs(20, source="reading")
+        arxiv_docs = _fake_vault_docs(20, source="arxiv")
+        store = _make_mock_store(reading_docs + arxiv_docs)
+        model_path = str(tmp_path / "umap_arxiv.joblib")
+
+        reducer, vault_2d, vault_docs = build_or_load_umap(
+            store=store,
+            model_path=model_path,
+            source_filter="arxiv",
+        )
+
+        # Only arXiv-tagged docs should be returned
+        assert len(vault_docs) == 20
+        assert all(d["source_note"] == "arxiv" for d in vault_docs)
+        assert vault_2d.shape == (20, 2)
+
+    def test_source_filter_none_returns_all_docs(self, tmp_path):
+        """Without source_filter, all vault docs are used (existing behaviour)."""
+        reading_docs = _fake_vault_docs(20, source="reading")
+        arxiv_docs = _fake_vault_docs(20, source="arxiv")
+        store = _make_mock_store(reading_docs + arxiv_docs)
+        model_path = str(tmp_path / "umap_all.joblib")
+
+        reducer, vault_2d, vault_docs = build_or_load_umap(
+            store=store,
+            model_path=model_path,
+            source_filter=None,
+        )
+
+        assert len(vault_docs) == 40
+        assert vault_2d.shape == (40, 2)
+
+    def test_source_filter_no_matching_docs_returns_empty(self, tmp_path):
+        """If no docs match the filter, return (None, zeros(0,2), [])."""
+        reading_docs = _fake_vault_docs(5, source="reading")
+        store = _make_mock_store(reading_docs)
+        model_path = str(tmp_path / "umap_arxiv_empty.joblib")
+
+        reducer, vault_2d, vault_docs = build_or_load_umap(
+            store=store,
+            model_path=model_path,
+            source_filter="arxiv",
+        )
+
+        assert reducer is None
+        assert vault_2d.shape == (0, 2)
+        assert vault_docs == []

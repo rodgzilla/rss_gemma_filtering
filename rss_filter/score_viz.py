@@ -94,7 +94,8 @@ def build_or_load_umap(
     model_path: str,
     force_rebuild: bool = False,
     growth_threshold: float = 0.1,
-) -> tuple[umap.UMAP, np.ndarray, list[dict]]:
+    source_filter: str | None = None,
+) -> tuple[umap.UMAP | None, np.ndarray, list[dict]]:
     """Return a fitted UMAP model, the vault 2-D coordinates, and vault metadata.
 
     The fitted model and vault coordinates are cached to *model_path* and a
@@ -104,14 +105,24 @@ def build_or_load_umap(
     - The vault has grown by more than ``growth_threshold`` (fraction) since
       the model was last fitted.
 
+    Args:
+        source_filter: If set, only vault docs with ``source_note`` equal to
+                       this value are used (e.g. ``"arxiv"``).  Use ``None``
+                       (default) to use all vault docs.
+
     Returns:
-        reducer:        fitted umap.UMAP instance
+        reducer:        fitted umap.UMAP instance (None if < 2 docs)
         vault_2d:       np.ndarray of shape (N_vault, 2)
         vault_docs:     list of dicts {"url", "text", "source_note", "date"}
                         in the same order as vault_2d rows
     """
     vault_docs = store.get_all()
+    if source_filter is not None:
+        vault_docs = [d for d in vault_docs if d["source_note"] == source_filter]
     n_current = len(vault_docs)
+
+    if n_current == 0:
+        return None, np.zeros((0, 2), dtype=np.float32), []
 
     meta = _load_umap_meta(model_path)
     n_fitted = meta.get("n_vault_docs", 0)
