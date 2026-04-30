@@ -223,6 +223,9 @@ def write_score_viz(
     threshold_arxiv: float,
     output_path: Path,
     vault_bg_max: int = 500,
+    arxiv_vault_2d: np.ndarray | None = None,
+    arxiv_vault_docs: list[dict] | None = None,
+    arxiv_umap_reducer=None,
 ) -> None:
     """Write a self-contained interactive HTML visualisation.
 
@@ -277,12 +280,25 @@ def write_score_viz(
     # --- Vault background (shared between rows) ---
     vault_2d_bg = vault_2d
     vault_docs_bg = vault_docs
+    rng = np.random.default_rng(seed=42)
     if len(vault_2d) > vault_bg_max:
-        rng = np.random.default_rng(seed=42)
         idx_bg = rng.choice(len(vault_2d), vault_bg_max, replace=False)
         idx_bg.sort()
         vault_2d_bg = vault_2d[idx_bg]
         vault_docs_bg = [vault_docs[i] for i in idx_bg]
+
+    # --- arXiv vault background (independent subsample) ---
+    if arxiv_vault_2d is not None and len(arxiv_vault_2d) > 0:
+        arxiv_vault_2d_bg = arxiv_vault_2d
+        arxiv_vault_docs_bg = arxiv_vault_docs or []
+        if len(arxiv_vault_2d) > vault_bg_max:
+            idx_abg = rng.choice(len(arxiv_vault_2d), vault_bg_max, replace=False)
+            idx_abg.sort()
+            arxiv_vault_2d_bg = arxiv_vault_2d[idx_abg]
+            arxiv_vault_docs_bg = [arxiv_vault_docs_bg[i] for i in idx_abg]
+    else:
+        arxiv_vault_2d_bg = vault_2d_bg  # fallback: reading vault (backward compat)
+        arxiv_vault_docs_bg = vault_docs_bg
 
     def _vault_trace(xax, yax):
         vault_hover = [
@@ -304,6 +320,29 @@ def write_score_viz(
             },
             "text": vault_hover,
             "hovertemplate": "%{text}<extra></extra>",
+            "xaxis": xax,
+            "yaxis": yax,
+        }
+
+    def _arxiv_vault_trace(xax, yax):
+        hover = [
+            f"<b>{_truncate(d['text'], 100)}</b><br>Source: {d['source_note']}"
+            for d in arxiv_vault_docs_bg
+        ]
+        return {
+            "type": "scatter",
+            "mode": "markers",
+            "name": "arXiv vault",
+            "x": arxiv_vault_2d_bg[:, 0].tolist(),
+            "y": arxiv_vault_2d_bg[:, 1].tolist(),
+            "marker": {
+                "color": "#bbbbbb",
+                "size": 4,
+                "opacity": 0.4,
+            },
+            "hovertemplate": "%{text}<extra></extra>",
+            "text": hover,
+            "showlegend": False,
             "xaxis": xax,
             "yaxis": yax,
         }
@@ -430,13 +469,23 @@ def write_score_viz(
         return traces
 
     # --- Vault-fitted UMAP transform per group ---
-    def _vault_umap_traces(matrix, kept, hovers, xax, yax, urls=None):
+    def _vault_umap_traces(matrix, kept, hovers, xax, yax, urls=None, use_arxiv=False):
         traces = []
-        if vault_2d_bg is not None and len(vault_2d_bg) > 0:
-            traces.append(_vault_trace(xax, yax))
-        if matrix is not None and umap_reducer is not None:
+        if use_arxiv:
+            bg_2d = arxiv_vault_2d_bg
+            reducer = (
+                arxiv_umap_reducer if arxiv_umap_reducer is not None else umap_reducer
+            )
+            if bg_2d is not None and len(bg_2d) > 0:
+                traces.append(_arxiv_vault_trace(xax, yax))
+        else:
+            bg_2d = vault_2d_bg
+            reducer = umap_reducer
+            if bg_2d is not None and len(bg_2d) > 0:
+                traces.append(_vault_trace(xax, yax))
+        if matrix is not None and reducer is not None:
             try:
-                xy = umap_reducer.transform(matrix).astype(np.float32)[: len(matrix)]
+                xy = reducer.transform(matrix).astype(np.float32)[: len(matrix)]
                 traces.append(
                     _umap_scatter(
                         xy, kept, hovers, "Kept", kept_colour, xax, yax, urls=urls
@@ -471,7 +520,7 @@ def write_score_viz(
         r_matrix, r_kept, r_hovers, "x2", "y2", urls=r_urls
     )
     all_traces += _vault_umap_traces(
-        a_matrix, a_kept, a_hovers, "x4", "y4", urls=a_urls
+        a_matrix, a_kept, a_hovers, "x4", "y4", urls=a_urls, use_arxiv=True
     )
 
     traces_json = json.dumps(all_traces)

@@ -561,3 +561,96 @@ class TestBuildOrLoadUmapSourceFilter:
         assert reducer is None
         assert vault_2d.shape == (1, 2)
         assert vault_docs == []
+
+
+class TestWriteScoreVizArxivVault:
+    """Tests for arXiv-specific vault params in write_score_viz."""
+
+    def _arxiv_vault_docs(self, n: int) -> list[dict]:
+        return [
+            {
+                "url": f"http://arxiv.com/{i}",
+                "text": f"arXiv vault {i}",
+                "source_note": "arxiv",
+                "date": "2024-06-01",
+            }
+            for i in range(n)
+        ]
+
+    def test_arxiv_vault_bg_uses_arxiv_coords(self, tmp_path):
+        """When arxiv_vault_2d is provided, arXiv panel background uses those coords."""
+        n_arxiv = 4
+        arxiv_vault_2d = np.full((n_arxiv, 2), 99.0, dtype=np.float32)  # distinctive
+        arxiv_vault_docs = self._arxiv_vault_docs(n_arxiv)
+
+        results = [
+            _result(f"arXiv {i}", keep=True, score=0.9, is_arxiv=True) for i in range(2)
+        ]
+        metadata = [_meta(0.9) for _ in results]
+
+        arxiv_reducer = MagicMock()
+        arxiv_reducer.transform.return_value = np.random.rand(2, 2).astype(np.float32)
+
+        out = tmp_path / "test.html"
+        write_score_viz(
+            results=results,
+            entry_metadata=metadata,
+            vault_2d=np.zeros((3, 2), dtype=np.float32),
+            vault_docs=[
+                {
+                    "url": "u",
+                    "text": "t",
+                    "source_note": "reading",
+                    "date": "2024-01-01",
+                }
+            ]
+            * 3,
+            umap_reducer=MagicMock(
+                transform=MagicMock(
+                    return_value=np.random.rand(2, 2).astype(np.float32)
+                )
+            ),
+            threshold_reading=0.5,
+            threshold_arxiv=0.4,
+            output_path=out,
+            arxiv_vault_2d=arxiv_vault_2d,
+            arxiv_vault_docs=arxiv_vault_docs,
+            arxiv_umap_reducer=arxiv_reducer,
+        )
+
+        html = out.read_text()
+        # The distinctive 99.0 value should appear in the JSON trace data
+        assert "99.0" in html
+
+    def test_arxiv_vault_none_falls_back_to_reading_vault(self, tmp_path):
+        """Without arxiv args, arXiv panel uses reading vault (backward compat)."""
+        results = [
+            _result(f"arXiv {i}", keep=True, score=0.9, is_arxiv=True) for i in range(2)
+        ]
+        metadata = [_meta(0.9) for _ in results]
+
+        out = tmp_path / "test_fallback.html"
+        umap_reducer = MagicMock()
+        umap_reducer.transform.return_value = np.random.rand(2, 2).astype(np.float32)
+
+        write_score_viz(
+            results=results,
+            entry_metadata=metadata,
+            vault_2d=np.zeros((3, 2), dtype=np.float32),
+            vault_docs=[
+                {
+                    "url": "u",
+                    "text": "t",
+                    "source_note": "reading",
+                    "date": "2024-01-01",
+                }
+            ]
+            * 3,
+            umap_reducer=umap_reducer,
+            threshold_reading=0.5,
+            threshold_arxiv=0.4,
+            output_path=out,
+            # No arxiv_vault_* args
+        )
+
+        assert out.exists()
