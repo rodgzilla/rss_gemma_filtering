@@ -545,3 +545,19 @@ class TestBuildOrLoadUmapSourceFilter:
         assert reducer is None
         assert vault_2d.shape == (0, 2)
         assert vault_docs == []
+
+    def test_source_filter_single_matching_doc_returns_empty(self, tmp_path):
+        """If exactly 1 doc matches, return (None, zeros(1,2), []) — not crash."""
+        docs = _fake_vault_docs(1, source="arxiv")
+        store = _make_mock_store(docs)
+        model_path = str(tmp_path / "umap_arxiv_one.joblib")
+
+        reducer, vault_2d, vault_docs = build_or_load_umap(
+            store=store,
+            model_path=model_path,
+            source_filter="arxiv",
+        )
+
+        assert reducer is None
+        assert vault_2d.shape == (1, 2)
+        assert vault_docs == []

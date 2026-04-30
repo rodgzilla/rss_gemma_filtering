@@ -121,8 +121,8 @@ def build_or_load_umap(
         vault_docs = [d for d in vault_docs if d["source_note"] == source_filter]
     n_current = len(vault_docs)
 
-    if n_current == 0:
-        return None, np.zeros((0, 2), dtype=np.float32), []
+    if n_current < 2:
+        return None, np.zeros((n_current, 2), dtype=np.float32), []
 
     meta = _load_umap_meta(model_path)
     n_fitted = meta.get("n_vault_docs", 0)
