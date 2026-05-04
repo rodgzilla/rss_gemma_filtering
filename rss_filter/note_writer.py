@@ -88,7 +88,9 @@ def render_reading_section(results: List[FilterResult]) -> str:
     if not results:
         return ""
     lines = ["## Reading", ""]
-    for r in results:
+    for r in sorted(
+        results, key=lambda r: r.score if r.score is not None else 0.0, reverse=True
+    ):
         score_str = f" *(score: {r.score:.4f})*" if r.score is not None else ""
         lines.append(f"- [{r.entry.title}]({r.entry.url}){score_str}")
         lines.extend(_render_exemplars(r.exemplars))
@@ -101,7 +103,9 @@ def render_arxiv_section(results: List[FilterResult]) -> str:
     if not results:
         return ""
     lines = ["## Arxiv monitoring", ""]
-    for r in results:
+    for r in sorted(
+        results, key=lambda r: r.score if r.score is not None else 0.0, reverse=True
+    ):
         score_str = f" *(score: {r.score:.4f})*" if r.score is not None else ""
         lines.append(f"- [{r.entry.title}]({r.entry.url}){score_str}")
         lines.extend(_render_exemplars(r.exemplars))
