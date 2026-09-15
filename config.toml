@@ -1,6 +1,9 @@
 [paths]
 seen_entries = "seen_entries.json"
 
+[fetch]
+timeout_seconds = 15  # per-feed network timeout; unresponsive feeds are skipped
+
 [vault]
 daily_notes_folder = "Daily notes"
 output_folder = "Filtered feed"

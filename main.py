@@ -119,6 +119,17 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     parser.add_argument(
+        "--feed-timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help=(
+            "Per-feed network timeout in seconds; unresponsive feeds are "
+            "skipped instead of stalling the fetch loop "
+            "(default: from config key fetch.timeout_seconds, fallback 15)."
+        ),
+    )
+    parser.add_argument(
         "--no-seen-filter",
         action="store_true",
         help="Skip deduplication against seen_entries.json (useful for testing)",
@@ -157,6 +168,9 @@ def main(argv: list[str] | None = None) -> None:
     umap_growth_threshold = emb_cfg.get("umap_growth_threshold", 0.1)
     vault_bg_max = args.vault_bg_max or emb_cfg.get("vault_bg_max", 500)
 
+    fetch_cfg = cfg.get("fetch", {})
+    feed_timeout = args.feed_timeout or fetch_cfg.get("timeout_seconds", 15)
+
     seen_path = Path(path_cfg["seen_entries"])
 
     # --- Step 1: Build / update embedding database from vault ---
@@ -184,7 +198,7 @@ def main(argv: list[str] | None = None) -> None:
 
     for feed_title, feed_url in tqdm(feeds, desc="Fetching feeds", unit="feed"):
         try:
-            fetched = fetch_feed(feed_url, feed_title)
+            fetched = fetch_feed(feed_url, feed_title, timeout=feed_timeout)
             new = filter_new_entries(fetched, seen_guids)
             all_entries.extend(new)
         except Exception as e:

@@ -1,15 +1,18 @@
 """Tests for rss_filter.rss_fetcher"""
 
 import json
+import socket
 import textwrap
 from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from urllib.error import URLError
 
 import pytest
 
 from rss_filter.models import RSSEntry
 from rss_filter.rss_fetcher import (
+    DEFAULT_FEED_TIMEOUT,
     classify_is_arxiv,
     deduplicate_entries,
     fetch_feed,
@@ -171,6 +174,78 @@ def test_fetch_feed_uses_link_as_guid_fallback(mocker):
     results = fetch_feed("https://example.com/feed", "Example")
 
     assert results[0].guid == "https://example.com/b"
+
+
+# ---------------------------------------------------------------------------
+# fetch_feed timeout handling
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_feed_bounds_socket_timeout_during_parse(mocker):
+    """The socket default timeout must be set while feedparser.parse runs,
+    and restored to its previous value afterwards (avoids an unresponsive
+    server hanging the fetch loop forever)."""
+    captured = {}
+    original = socket.getdefaulttimeout()
+
+    def fake_parse(url):
+        captured["timeout"] = socket.getdefaulttimeout()
+        return _make_mock_feed([])
+
+    mocker.patch("feedparser.parse", side_effect=fake_parse)
+
+    fetch_feed("https://example.com/feed", "Example", timeout=5)
+
+    assert captured["timeout"] == 5
+    assert socket.getdefaulttimeout() == original
+
+
+def test_fetch_feed_uses_default_timeout_when_not_specified(mocker):
+    captured = {}
+
+    def fake_parse(url):
+        captured["timeout"] = socket.getdefaulttimeout()
+        return _make_mock_feed([])
+
+    mocker.patch("feedparser.parse", side_effect=fake_parse)
+
+    fetch_feed("https://example.com/feed", "Example")
+
+    assert captured["timeout"] == DEFAULT_FEED_TIMEOUT
+
+
+def test_fetch_feed_raises_timeout_error_on_socket_timeout(mocker):
+    mock_feed = _make_mock_feed([])
+    mock_feed.bozo = True
+    mock_feed.bozo_exception = socket.timeout("timed out")
+    mocker.patch("feedparser.parse", return_value=mock_feed)
+
+    with pytest.raises(TimeoutError):
+        fetch_feed("https://example.com/feed", "Example", timeout=1)
+
+
+def test_fetch_feed_raises_timeout_error_when_urlerror_wraps_timeout(mocker):
+    mock_feed = _make_mock_feed([])
+    mock_feed.bozo = True
+    mock_feed.bozo_exception = URLError(socket.timeout("timed out"))
+    mocker.patch("feedparser.parse", return_value=mock_feed)
+
+    with pytest.raises(TimeoutError):
+        fetch_feed("https://example.com/feed", "Example", timeout=1)
+
+
+def test_fetch_feed_does_not_raise_for_non_timeout_bozo(mocker):
+    """A malformed-but-parseable feed (bozo for a non-timeout reason) should
+    still return whatever entries were parsed, unchanged from before."""
+    mock_entry = _make_entry("Title", "https://example.com/c", "Summary", "guid-c")
+    mock_feed = _make_mock_feed([mock_entry])
+    mock_feed.bozo = True
+    mock_feed.bozo_exception = ValueError("malformed xml")
+    mocker.patch("feedparser.parse", return_value=mock_feed)
+
+    results = fetch_feed("https://example.com/feed", "Example")
+
+    assert len(results) == 1
 
 
 # ---------------------------------------------------------------------------

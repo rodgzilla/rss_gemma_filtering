@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import socket
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
@@ -12,6 +14,35 @@ import feedparser
 import listparser
 
 from rss_filter.models import RSSEntry
+
+DEFAULT_FEED_TIMEOUT = 15  # seconds
+
+
+@contextmanager
+def _socket_timeout(seconds: float):
+    """Temporarily set the process-wide default socket timeout.
+
+    feedparser has no built-in per-request timeout. Under the hood it uses
+    urllib, which falls back to the global socket default (normally "block
+    forever") whenever no explicit timeout is given. Setting that default
+    here bounds every connection feedparser makes for the duration of the
+    call, then restores the previous value.
+    """
+    previous = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(seconds)
+    try:
+        yield
+    finally:
+        socket.setdefaulttimeout(previous)
+
+
+def _is_timeout_exception(exc: Optional[BaseException]) -> bool:
+    """Return True if `exc` is (or wraps) a socket/connection timeout."""
+    if exc is None:
+        return False
+    if isinstance(exc, TimeoutError):  # socket.timeout is an alias of this
+        return True
+    return isinstance(getattr(exc, "reason", None), TimeoutError)
 
 
 def parse_opml(opml_path: Path) -> List[Tuple[str, str]]:
@@ -43,9 +74,24 @@ def _parse_published(item) -> Optional[str]:
     return None
 
 
-def fetch_feed(feed_url: str, feed_name: str) -> List[RSSEntry]:
-    """Fetch a single RSS/Atom feed and return its entries as RSSEntry objects."""
-    parsed = feedparser.parse(feed_url)
+def fetch_feed(
+    feed_url: str, feed_name: str, timeout: float = DEFAULT_FEED_TIMEOUT
+) -> List[RSSEntry]:
+    """Fetch a single RSS/Atom feed and return its entries as RSSEntry objects.
+
+    Raises TimeoutError if the feed does not respond within `timeout` seconds,
+    so an unresponsive server doesn't stall the whole fetch loop.
+    """
+    with _socket_timeout(timeout):
+        parsed = feedparser.parse(feed_url)
+
+    if getattr(parsed, "bozo", False) and _is_timeout_exception(
+        getattr(parsed, "bozo_exception", None)
+    ):
+        raise TimeoutError(
+            f"Timed out after {timeout}s fetching feed '{feed_name}' ({feed_url})"
+        )
+
     entries = []
     for item in parsed.entries:
         link = getattr(item, "link", "") or ""
