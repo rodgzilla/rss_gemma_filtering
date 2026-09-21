@@ -39,6 +39,12 @@ _SELECT_ALL_WITH_META = "SELECT url, text, source_note, date, embedding FROM doc
 
 _COUNT = "SELECT COUNT(*) FROM documents;"
 
+_CREATE_META = (
+    "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+)
+_GET_META = "SELECT value FROM meta WHERE key = ?;"
+_SET_META = "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);"
+
 # Maximum number of texts sent to the embedding API in one chunk.
 _EMBED_CHUNK_SIZE = 64
 
@@ -67,6 +73,9 @@ class EmbeddingStore:
         self._db_path = db_path
         self._conn = sqlite3.connect(db_path)
         self._conn.execute(_CREATE_TABLE)
+        self._conn.execute(_CREATE_META)
+        # Cached (texts, urls, titles, unit_matrix) for query(); None when stale.
+        self._cache: tuple[list[str], list[str], list[str], np.ndarray] | None = None
         # Migration: add title column if it doesn't exist (existing databases)
         cols = {row[1] for row in self._conn.execute("PRAGMA table_info(documents);")}
         if "title" not in cols:
@@ -84,21 +93,39 @@ class EmbeddingStore:
         entries: list[NoteEntry],
         client: EmbeddingClient,
         force_rebuild: bool = False,
+        signature: str = "",
         prompt_style: str = "none",
-    ) -> None:
+    ) -> bool:
         """Embed and store vault note entries.
 
         If *force_rebuild* is True the entire table is dropped and rebuilt.
         Otherwise only entries whose (url, source_note) pair is not yet in
         the database are embedded and inserted.
 
+        *signature* identifies how the stored vectors were produced (model,
+        prompt style, text preparation version). When it differs from the one
+        recorded in the database and the store is not empty, the table is
+        rebuilt. An empty *signature* never triggers a rebuild and leaves the
+        recorded one untouched.
+
         *prompt_style* selects the embedding text format (see
         ``text_prep.format_for_embedding``); feed entries must use the same one.
+
+        Returns True if the table was rebuilt from scratch.
         """
+        stored = self._get_meta("signature")
+        if signature and stored != signature and self.count() > 0:
+            print(
+                f"Embedding store: signature changed ({stored!r} → {signature!r}); "
+                "rebuilding."
+            )
+            force_rebuild = True
+
         if force_rebuild:
             self._conn.execute(_DROP_TABLE)
             self._conn.execute(_CREATE_TABLE)
             self._conn.commit()
+            self._cache = None
             existing: set[tuple[str, str]] = set()
         else:
             rows = self._conn.execute(_SELECT_EXISTING_KEYS).fetchall()
@@ -106,9 +133,13 @@ class EmbeddingStore:
 
         new_entries = [e for e in entries if (e.url, e.source) not in existing]
 
+        if signature:
+            self._set_meta("signature", signature)
+            self._conn.commit()
+
         if not new_entries:
             print(f"Embedding store: 0 new entries, {len(existing)} already stored.")
-            return
+            return force_rebuild
 
         texts = [_embed_text_for_entry(e, prompt_style) for e in new_entries]
         embeddings = _embed_in_chunks(
@@ -128,11 +159,13 @@ class EmbeddingStore:
         ]
         self._conn.executemany(_INSERT_DOC, rows_to_insert)
         self._conn.commit()
+        self._cache = None
 
         print(
             f"Embedding store: {len(new_entries)} new entries embedded, "
             f"{len(existing)} already stored."
         )
+        return force_rebuild
 
     # ------------------------------------------------------------------
     # Querying
@@ -144,22 +177,11 @@ class EmbeddingStore:
         Each result is a dict with keys ``text``, ``url``, and ``score``
         (cosine similarity, float in [-1, 1]).
         """
-        rows = self._conn.execute(_SELECT_ALL).fetchall()
-        if not rows:
+        if self._cache is None:
+            self._cache = self._load_matrix()
+        texts, urls, titles, matrix_norm = self._cache
+        if not texts:
             return []
-
-        texts = [row[0] for row in rows]
-        urls = [row[1] for row in rows]
-        matrix = np.stack(
-            [np.frombuffer(row[2], dtype=np.float32) for row in rows], axis=0
-        )  # shape (N, D)
-        titles = [row[3] for row in rows]
-
-        # Normalise stored embeddings and query vector.
-        matrix_norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-        # Avoid division by zero for any zero vectors.
-        matrix_norms = np.where(matrix_norms == 0, 1.0, matrix_norms)
-        matrix_norm = matrix / matrix_norms
 
         query_norm_val = np.linalg.norm(embedding)
         if query_norm_val == 0:
@@ -169,7 +191,7 @@ class EmbeddingStore:
 
         scores = matrix_norm @ query_unit  # shape (N,)
 
-        k = min(top_k, len(rows))
+        k = min(top_k, len(texts))
         top_indices = np.argpartition(scores, -k)[-k:]
         top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
 
@@ -182,6 +204,43 @@ class EmbeddingStore:
             }
             for i in top_indices
         ]
+
+    def _load_matrix(
+        self,
+    ) -> tuple[list[str], list[str], list[str], np.ndarray]:
+        """Read all documents and return ``(texts, urls, titles, unit_matrix)``.
+
+        *unit_matrix* holds the stored embeddings normalised to unit length
+        (zero vectors are left as-is); it is empty when the store is.
+        """
+        rows = self._conn.execute(_SELECT_ALL).fetchall()
+        if not rows:
+            return [], [], [], np.empty((0, 0), dtype=np.float32)
+
+        texts = [row[0] for row in rows]
+        urls = [row[1] for row in rows]
+        matrix = np.stack(
+            [np.frombuffer(row[2], dtype=np.float32) for row in rows], axis=0
+        )  # shape (N, D)
+        titles = [row[3] for row in rows]
+
+        matrix_norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+        # Avoid division by zero for any zero vectors.
+        matrix_norms = np.where(matrix_norms == 0, 1.0, matrix_norms)
+        return texts, urls, titles, matrix / matrix_norms
+
+    # ------------------------------------------------------------------
+    # Metadata
+    # ------------------------------------------------------------------
+
+    def _get_meta(self, key: str) -> str | None:
+        """Return the metadata value stored under *key*, or None."""
+        row = self._conn.execute(_GET_META, (key,)).fetchone()
+        return row[0] if row else None
+
+    def _set_meta(self, key: str, value: str) -> None:
+        """Store *value* under *key* (caller commits)."""
+        self._conn.execute(_SET_META, (key, value))
 
     # ------------------------------------------------------------------
     # Utilities

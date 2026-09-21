@@ -24,6 +24,7 @@ from rss_filter.rss_fetcher import (
 )
 from rss_filter.score_filter import score_entries
 from rss_filter.score_viz import build_or_load_umap, write_score_viz
+from rss_filter.text_prep import PREP_VERSION
 
 
 def load_config(config_path: Path) -> dict:
@@ -182,10 +183,12 @@ def main(argv: list[str] | None = None) -> None:
 
     print(f"  Building / updating embedding store at: {store_path}")
     store = EmbeddingStore(store_path)
-    store.build_or_update(
+    embedding_signature = f"{emb_model}|prompt={prompt_style}|prep={PREP_VERSION}"
+    rebuilt = store.build_or_update(
         note_entries,
         embed_client,
         force_rebuild=args.rebuild_embeddings,
+        signature=embedding_signature,
         prompt_style=prompt_style,
     )
     print(f"  Embedding store contains {store.count()} documents.")
@@ -302,13 +305,13 @@ def main(argv: list[str] | None = None) -> None:
             umap_reducer, vault_2d, vault_docs = build_or_load_umap(
                 store=store,
                 model_path=umap_model_path,
-                force_rebuild=args.rebuild_umap or args.rebuild_embeddings,
+                force_rebuild=args.rebuild_umap or args.rebuild_embeddings or rebuilt,
                 growth_threshold=umap_growth_threshold,
             )
             arxiv_umap_reducer, arxiv_vault_2d, arxiv_vault_docs = build_or_load_umap(
                 store=store,
                 model_path=arxiv_umap_model_path,
-                force_rebuild=args.rebuild_umap or args.rebuild_embeddings,
+                force_rebuild=args.rebuild_umap or args.rebuild_embeddings or rebuilt,
                 growth_threshold=umap_growth_threshold,
                 source_filter="arxiv",
             )

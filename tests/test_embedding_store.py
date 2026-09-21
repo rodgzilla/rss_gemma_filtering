@@ -228,3 +228,144 @@ class TestEmbedTextForEntry:
                 [self._entry("Title more text")], client, prompt_style="document"
             )
         client.embed_batch.assert_called_once_with(["title: Title | text: more text"])
+
+
+# ---------------------------------------------------------------------------
+# signature / auto-rebuild
+# ---------------------------------------------------------------------------
+
+
+class TestSignature:
+    def _entries(self) -> list[NoteEntry]:
+        return [_note("http://a.com", "text A"), _note("http://b.com", "text B")]
+
+    def _vecs(self) -> list[np.ndarray]:
+        return [_unit([1.0, 0.0]), _unit([0.0, 1.0])]
+
+    def test_same_signature_embeds_nothing_new(self, tmp_path):
+        db = str(tmp_path / "s.db")
+        with EmbeddingStore(db) as s:
+            assert (
+                s.build_or_update(
+                    self._entries(), _make_client(self._vecs()), signature="a"
+                )
+                is False
+            )
+        client = _make_client(self._vecs())
+        with EmbeddingStore(db) as s:
+            assert s.build_or_update(self._entries(), client, signature="a") is False
+            assert s.count() == 2
+        client.embed_batch.assert_not_called()
+
+    def test_changed_signature_rebuilds_everything(self, tmp_path):
+        db = str(tmp_path / "s.db")
+        with EmbeddingStore(db) as s:
+            s.build_or_update(
+                self._entries(), _make_client(self._vecs()), signature="a"
+            )
+        client = _make_client(self._vecs())
+        with EmbeddingStore(db) as s:
+            assert s.build_or_update(self._entries(), client, signature="b") is True
+            assert s.count() == 2
+        assert len(client.embed_batch.call_args[0][0]) == 2
+        client2 = _make_client()
+        with EmbeddingStore(db) as s:
+            assert s.build_or_update(self._entries(), client2, signature="b") is False
+        client2.embed_batch.assert_not_called()
+
+    def test_old_schema_without_meta_is_rebuilt(self, tmp_path):
+        import sqlite3
+
+        db = str(tmp_path / "old.db")
+        with EmbeddingStore(db) as s:
+            s.build_or_update(self._entries(), _make_client(self._vecs()))
+        conn = sqlite3.connect(db)
+        conn.execute("DROP TABLE meta;")
+        conn.commit()
+        conn.close()
+
+        client = _make_client(self._vecs())
+        with EmbeddingStore(db) as s:
+            assert s.build_or_update(self._entries(), client, signature="a") is True
+            assert s.count() == 2
+        assert len(client.embed_batch.call_args[0][0]) == 2
+
+    def test_first_signature_on_empty_store_is_not_a_rebuild(self, store, capsys):
+        assert (
+            store.build_or_update(
+                self._entries(), _make_client(self._vecs()), signature="a"
+            )
+            is False
+        )
+        assert "rebuilding" not in capsys.readouterr().out
+
+    def test_empty_signature_keeps_stored_one(self, tmp_path):
+        db = str(tmp_path / "s.db")
+        with EmbeddingStore(db) as s:
+            s.build_or_update(
+                self._entries(), _make_client(self._vecs()), signature="a"
+            )
+        with EmbeddingStore(db) as s:
+            assert s.build_or_update(self._entries(), _make_client()) is False
+        client = _make_client()
+        with EmbeddingStore(db) as s:
+            assert s.build_or_update(self._entries(), client, signature="a") is False
+        client.embed_batch.assert_not_called()
+
+    def test_force_rebuild_returns_true(self, store):
+        store.build_or_update(
+            self._entries(), _make_client(self._vecs()), signature="a"
+        )
+        assert (
+            store.build_or_update(
+                self._entries(),
+                _make_client(self._vecs()),
+                force_rebuild=True,
+                signature="a",
+            )
+            is True
+        )
+
+
+# ---------------------------------------------------------------------------
+# query matrix cache
+# ---------------------------------------------------------------------------
+
+
+class TestQueryCache:
+    def test_matrix_loaded_once_and_reloaded_after_insert(self, store, monkeypatch):
+        store.build_or_update(
+            [_note("http://a.com", "A")], _make_client([_unit([1.0, 0.0])])
+        )
+        calls = []
+        original = store._load_matrix
+
+        def spy():
+            calls.append(1)
+            return original()
+
+        monkeypatch.setattr(store, "_load_matrix", spy)
+
+        store.query(_unit([1.0, 0.0]))
+        store.query(_unit([0.0, 1.0]))
+        assert len(calls) == 1
+
+        store.build_or_update(
+            [_note("http://b.com", "B")], _make_client([_unit([0.0, 1.0])])
+        )
+        results = store.query(_unit([0.0, 1.0]), top_k=1)
+        assert len(calls) == 2
+        assert results[0]["url"] == "http://b.com"
+
+    def test_cache_cleared_on_force_rebuild(self, store):
+        store.build_or_update(
+            [_note("http://a.com", "A")], _make_client([_unit([1.0, 0.0])])
+        )
+        assert store.query(_unit([1.0, 0.0]))[0]["url"] == "http://a.com"
+        store.build_or_update(
+            [_note("http://b.com", "B")],
+            _make_client([_unit([0.0, 1.0])]),
+            force_rebuild=True,
+        )
+        results = store.query(_unit([1.0, 0.0]))
+        assert [r["url"] for r in results] == ["http://b.com"]
