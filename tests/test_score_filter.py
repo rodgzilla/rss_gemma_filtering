@@ -164,3 +164,29 @@ class TestScoreEntries:
         embed_client, store = _make_mocks([[0.5]] * 5)
         results, _, _, _ = score_entries(entries, store, embed_client, top_k=1)
         assert [r.entry for r in results] == entries
+
+    def test_summary_html_is_stripped_before_embedding(self):
+        entry = RSSEntry(
+            title="T",
+            url="http://example.com/t",
+            summary="<p>Hi</p>",
+            feed_name="F",
+            is_arxiv=False,
+            guid="t",
+        )
+        embed_client, store = _make_mocks([[0.5]])
+        score_entries([entry], store, embed_client, top_k=1, prompt_style="none")
+        embed_client.embed_batch.assert_called_once_with(["T Hi"])
+
+    def test_document_prompt_style(self):
+        entry = RSSEntry(
+            title="T",
+            url="http://example.com/t",
+            summary="<p>Hi</p>",
+            feed_name="F",
+            is_arxiv=False,
+            guid="t",
+        )
+        embed_client, store = _make_mocks([[0.5]])
+        score_entries([entry], store, embed_client, top_k=1, prompt_style="document")
+        embed_client.embed_batch.assert_called_once_with(["title: T | text: Hi"])

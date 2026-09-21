@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from rss_filter.embedding_store import EmbeddingStore
+from rss_filter.embedding_store import EmbeddingStore, _embed_text_for_entry
 from rss_filter.models import NoteEntry
 
 
@@ -183,3 +183,46 @@ class TestCount:
         entries = [_note("http://a.com"), _note("http://b.com")]
         store.build_or_update(entries, client)
         assert store.count() == 2
+
+
+# ---------------------------------------------------------------------------
+# _embed_text_for_entry
+# ---------------------------------------------------------------------------
+
+
+class TestEmbedTextForEntry:
+    def _entry(self, context: str, title: str = "Title", url: str = "u") -> NoteEntry:
+        return NoteEntry(
+            url=url, context=context, source="reading", date="2024-01-01", title=title
+        )
+
+    def test_document_style_strips_leading_title(self):
+        entry = self._entry("Title more text")
+        assert (
+            _embed_text_for_entry(entry, style="document")
+            == "title: Title | text: more text"
+        )
+
+    def test_document_style_falls_back_to_url_body(self):
+        entry = self._entry("")
+        assert _embed_text_for_entry(entry, style="document") == "title: Title | text: u"
+
+    def test_title_only_context_falls_back_to_url(self):
+        entry = self._entry("Title")
+        assert _embed_text_for_entry(entry, style="document") == "title: Title | text: u"
+
+    def test_none_style_is_title_then_body(self):
+        entry = self._entry("Title more text")
+        assert _embed_text_for_entry(entry) == "Title more text"
+
+    def test_context_not_starting_with_title_is_kept_whole(self):
+        entry = self._entry("Other words", title="Title")
+        assert _embed_text_for_entry(entry) == "Title Other words"
+
+    def test_build_or_update_passes_prompt_style(self, tmp_path):
+        client = _make_client([_unit([1.0, 0.0])])
+        with EmbeddingStore(str(tmp_path / "s.db")) as s:
+            s.build_or_update(
+                [self._entry("Title more text")], client, prompt_style="document"
+            )
+        client.embed_batch.assert_called_once_with(["title: Title | text: more text"])

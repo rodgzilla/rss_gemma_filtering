@@ -154,6 +154,7 @@ def main(argv: list[str] | None = None) -> None:
 
     store_path = emb_cfg.get("store_path", "embedding_store.db")
     top_k = emb_cfg.get("top_k", 3)
+    prompt_style = emb_cfg.get("prompt_style", "none")
 
     # Scoring parameters (CLI overrides config)
     top_quantile = args.top_quantile or emb_cfg.get("top_quantile", 0.25)
@@ -185,6 +186,7 @@ def main(argv: list[str] | None = None) -> None:
         note_entries,
         embed_client,
         force_rebuild=args.rebuild_embeddings,
+        prompt_style=prompt_style,
     )
     print(f"  Embedding store contains {store.count()} documents.")
 
@@ -245,6 +247,7 @@ def main(argv: list[str] | None = None) -> None:
         decay_lambda=decay_lambda,
         top_quantile=top_quantile,
         top_quantile_arxiv=top_quantile_arxiv,
+        prompt_style=prompt_style,
     )
 
     reading_results = []

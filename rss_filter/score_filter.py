@@ -8,6 +8,7 @@ from tqdm import tqdm
 from rss_filter.embedding_client import EmbeddingClient
 from rss_filter.embedding_store import EmbeddingStore
 from rss_filter.models import FilterResult, RSSEntry
+from rss_filter.text_prep import clean_summary, format_for_embedding
 
 # Number of Matryoshka dimensions used for embedding (also used in score_viz for UMAP).
 MATRYOSHKA_DIM = 128
@@ -40,6 +41,7 @@ def score_entries(
     decay_lambda: float = 1.0,
     top_quantile: float = 0.25,
     top_quantile_arxiv: float | None = None,
+    prompt_style: str = "none",
 ) -> tuple[list[FilterResult], list[dict], float, float]:
     """Score RSS entries using embedding similarity and select the top quantile.
 
@@ -48,8 +50,8 @@ def score_entries(
     is *None* it falls back to the same value as ``top_quantile``.
 
     Pipeline:
-    1. Embed each entry as ``title + " " + summary`` (summary aids the embedding
-       similarity search but is never shown to any LLM).
+    1. Embed each entry's title and plain-text summary, formatted with
+       ``prompt_style`` exactly like the vault entries in the store.
     2. For each entry retrieve the *top_k* most similar vault documents.
     3. Aggregate the K similarity scores with exponential decay weighting.
     4. Compute separate score distributions for reading vs arXiv entries and
@@ -74,7 +76,10 @@ def score_entries(
         return [], [], 0.0, 0.0
 
     # --- Step 1: embed all entries ---
-    texts = [f"{e.title} {e.summary or ''}".strip() for e in entries]
+    texts = [
+        format_for_embedding(e.title, clean_summary(e.summary), prompt_style)
+        for e in entries
+    ]
     _SCORE_CHUNK = 64
     embeddings: list[np.ndarray] = []
     chunks = [texts[i : i + _SCORE_CHUNK] for i in range(0, len(texts), _SCORE_CHUNK)]

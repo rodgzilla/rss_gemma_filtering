@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from rss_filter.embedding_client import EmbeddingClient
 from rss_filter.models import NoteEntry
+from rss_filter.text_prep import format_for_embedding
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -42,11 +43,18 @@ _COUNT = "SELECT COUNT(*) FROM documents;"
 _EMBED_CHUNK_SIZE = 64
 
 
-def _embed_text_for_entry(entry: NoteEntry) -> str:
-    """Return the text to embed for a vault note entry."""
-    return (
-        entry.context.strip() if entry.context and entry.context.strip() else entry.url
-    )
+def _embed_text_for_entry(entry: NoteEntry, style: str = "none") -> str:
+    """Return the text to embed for a vault note entry.
+
+    ``notes_parser`` puts the title first in ``context``; it is stripped off so the
+    body can be formatted exactly like a feed entry's (title, body). An empty body
+    falls back to the entry URL.
+    """
+    title = (entry.title or "").strip()
+    body = (entry.context or "").strip()
+    if title and body.startswith(title):
+        body = body[len(title) :].strip()
+    return format_for_embedding(title, body or entry.url, style)
 
 
 class EmbeddingStore:
@@ -73,12 +81,16 @@ class EmbeddingStore:
         entries: list[NoteEntry],
         client: EmbeddingClient,
         force_rebuild: bool = False,
+        prompt_style: str = "none",
     ) -> None:
         """Embed and store vault note entries.
 
         If *force_rebuild* is True the entire table is dropped and rebuilt.
         Otherwise only entries whose (url, source_note) pair is not yet in
         the database are embedded and inserted.
+
+        *prompt_style* selects the embedding text format (see
+        ``text_prep.format_for_embedding``); feed entries must use the same one.
         """
         if force_rebuild:
             self._conn.execute(_DROP_TABLE)
@@ -95,7 +107,7 @@ class EmbeddingStore:
             print(f"Embedding store: 0 new entries, {len(existing)} already stored.")
             return
 
-        texts = [_embed_text_for_entry(e) for e in new_entries]
+        texts = [_embed_text_for_entry(e, prompt_style) for e in new_entries]
         embeddings = _embed_in_chunks(
             client, texts, _EMBED_CHUNK_SIZE, desc="Embedding vault"
         )
