@@ -30,17 +30,28 @@ markdown links and optional context paragraphs.
 
 ### Process
 1. `notes_parser.parse_vault()` scans all `YYYY-MM-DD.md` files and extracts `NoteEntry`
-   objects: each holds a URL, a context snippet, the source note filename, and the date.
-2. For each `NoteEntry` the text to embed is the context snippet (or the URL as fallback).
-3. Each text is sent to the local embedding API (LM Studio default:
-   `text-embedding-embeddinggemma-300m-qat`).
-4. The resulting float32 embedding vector is stored alongside the original text, URL,
-   source note name, and date in a SQLite database (`embedding_store.db`).
+   objects: each holds a URL, a title, a context snippet, the section it came from
+   (`source`: `"reading"` or `"arxiv"`), and the date.
+2. The text to embed is built by `text_prep.format_for_embedding(title, body, prompt_style)`,
+   exactly as for feed entries (the body is the context minus the leading title; the URL is
+   used only when there is neither). Texts are capped at 4000 characters so each fits in
+   the server's 2048-token batch; if the server still rejects a batch, the client retries
+   the inputs one by one, halving any that are too long.
+3. Texts are sent to the local OpenAI-compatible embedding API (recommended: `llama-server`
+   with EmbeddingGemma 300M QAT Q4_0, default `http://127.0.0.1:8080/v1`).
+4. The resulting float32 embedding vector is stored alongside the embedded text, URL,
+   section (`source_note` column, holding `"reading"`/`"arxiv"`, not a filename), date and
+   title in a SQLite database (`embedding_store.db`, under `--state-dir`).
 
-### Incremental Updates
+### Incremental Updates and Rebuilds
 The database tracks which `(url, source_note)` pairs have already been embedded. On
 subsequent runs only new entries are processed. The `--rebuild-embeddings` CLI flag forces
 a full rebuild from scratch.
+
+The store also records a signature, `<model>|prompt=<prompt_style>|prep=<PREP_VERSION>`.
+When it differs from the current configuration (other model, prompt style or text
+cleaning version) the whole store is re-embedded automatically. New vectors are computed
+before the old table is dropped, so a server failure mid-rebuild leaves the old store intact.
 
 ---
 
@@ -60,10 +71,12 @@ Every surviving entry is forwarded to the scoring step.
 
 For each RSS entry (`score_filter.score_entries`):
 
-1. The text `<title> <summary>` is embedded using the same embedding model (in batches
-   of 64 for throughput).
+1. The summary is cleaned by `text_prep.clean_summary` (HTML stripped, arXiv's
+   `arXiv:… Announce Type: … Abstract:` header removed), then formatted with the title by
+   `format_for_embedding` using the same `prompt_style` as the vault, and embedded with the
+   same model (in batches of 64).
 2. The top-K most similar stored vault articles are retrieved from the database
-   (K = `top_k`, default 3).
+   (K = `top_k`, default 5; the normalised vault matrix is cached in memory).
 3. The K cosine similarities are aggregated using **exponential decay weighting**:
 
    ```
@@ -71,7 +84,7 @@ For each RSS entry (`score_filter.score_entries`):
    score    = Σ(sim_i * weight_i) / Σ(weight_i)
    ```
 
-   At `decay_lambda=1.0` the top match contributes roughly 58 % of the weight (top-3).
+   At `decay_lambda=1.0` the top match contributes roughly 64 % of the weight (top-5).
    At `decay_lambda=0` this reduces to a plain mean.
 
 ### Quantile Thresholds
@@ -80,8 +93,8 @@ Two independent quantile thresholds are applied after all scores are computed:
 
 - **Reading entries** (`top_quantile`, default 0.20): keep entries whose score is at or
   above the (1 − 0.20) = 80th percentile of all reading entry scores.
-- **arXiv entries** (`top_quantile_arxiv`, default 0.05): keep entries at or above the
-  95th percentile of all arXiv entry scores (tighter, since arXiv volume is high).
+- **arXiv entries** (`top_quantile_arxiv`, default 0.1): keep entries at or above the
+  90th percentile of all arXiv entry scores (tighter, since arXiv volume is high).
 
 Both thresholds can be overridden at the command line or in `rss_filter/config.toml`.
 
@@ -122,7 +135,7 @@ Obsidian vault (Daily notes/*.md)
         │  embedding_store.build_or_update()
         │  embedding_client.embed() × new entries
         ▼
-   embedding_store.db  (SQLite: url, text, source_note, date, embedding BLOB)
+   embedding_store.db  (SQLite: url, text, source_note, date, embedding BLOB, title)
         │
         │
 RSS feeds (OPML)
@@ -134,7 +147,7 @@ RSS feeds (OPML)
         ▼
    [RSSEntry list]
         │  score_filter.score_entries()
-        │    └─ embed(title + summary) per entry
+        │    └─ embed(format_for_embedding(title, clean_summary(summary)))
         │    └─ store.query(embedding, top_k) per entry
         │    └─ exponential decay aggregation
         │    └─ per-category quantile threshold
@@ -157,16 +170,17 @@ All settings live under the `[embedding]` section of `rss_filter/config.toml`:
 
 ```toml
 [embedding]
-base_url             = "http://localhost:1234/v1"
-model                = "text-embedding-embeddinggemma-300m-qat"
-store_path           = "embedding_store.db"
-top_k                = 3
-top_quantile         = 0.20
-top_quantile_arxiv   = 0.05
-decay_lambda         = 1.0
-umap_model_path      = "umap_model.joblib"
+model                 = "embeddinggemma-300m-qat-Q4_0"  # label only for llama-server; part of the store signature
+base_url              = "http://127.0.0.1:8080/v1"
+store_path            = "embedding_store.db"
+top_k                 = 5
+prompt_style          = "none"   # "none": "title body"; "document": "title: … | text: …"
+top_quantile          = 0.2
+top_quantile_arxiv    = 0.1
+decay_lambda          = 1.0
+umap_model_path       = "umap_model.joblib"
 umap_growth_threshold = 0.1
-vault_bg_max         = 500
+vault_bg_max          = 500
 ```
 
 ---
@@ -175,7 +189,8 @@ vault_bg_max         = 500
 
 | Module | Role |
 |---|---|
-| `rss_filter/embedding_client.py` | Thin wrapper around the LM Studio embedding API |
+| `rss_filter/embedding_client.py` | OpenAI-compatible embedding client (llama-server); retries oversized inputs one by one |
+| `rss_filter/text_prep.py` | HTML stripping, arXiv header removal, `prompt_style` formatting, length cap |
 | `rss_filter/embedding_store.py` | SQLite + numpy embedding database: build, update, query |
 | `rss_filter/score_filter.py` | Embed entries, retrieve exemplars, aggregate scores, apply quantile thresholds |
 | `rss_filter/score_viz.py` | Build and write the interactive UMAP HTML visualisation |

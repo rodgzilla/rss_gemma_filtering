@@ -3,9 +3,10 @@
 ## Requirements
 
 - Python 3.11+
-- A local embedding server compatible with the OpenAI API
-  (e.g. [LM Studio](https://lmstudio.ai/) with `text-embedding-embeddinggemma-300m-qat` loaded)
-  listening at `http://localhost:1234/v1` (default)
+- A local embedding server compatible with the OpenAI `/v1/embeddings` API, listening at
+  `http://127.0.0.1:8080/v1` (default). Recommended: llama.cpp's `llama-server` with
+  EmbeddingGemma 300M QAT Q4_0 (command line in the [README](README.md#embedding-server)).
+  Other servers (e.g. LM Studio) work too; set `base_url` accordingly.
 - An Obsidian vault with daily notes under `Daily notes/YYYY-MM-DD.md`
 - An OPML export of your RSS subscriptions
 
@@ -14,48 +15,64 @@
 ```bash
 git clone https://github.com/rodgzilla/rss_gemma_filtering
 cd rss_gemma_filtering
-pip install -r requirements.txt
+pip install .        # or: pip install -e '.[test]' for development
 ```
+
+This installs the `rss-filter` command; `python main.py` from the checkout is equivalent.
+On NixOS, see the README's "Running on NixOS" section.
 
 ## Configuration
 
-Edit `rss_filter/config.toml` before your first run:
+The defaults live in the packaged `rss_filter/config.toml`; pass `--config` to use your
+own copy (a missing key falls back to a built-in default):
 
 ```toml
-[embedding]
-base_url = "http://localhost:1234/v1"
-model = "text-embedding-embeddinggemma-300m-qat"
-store_path = "embedding_store.db"
-top_k = 3
-top_quantile = 0.20
-top_quantile_arxiv = 0.05
-decay_lambda = 1.0
-umap_model_path = "umap_model.joblib"
-umap_growth_threshold = 0.1
-vault_bg_max = 500
-
 [paths]
 seen_entries = "seen_entries.json"
+
+[fetch]
+timeout_seconds = 15
 
 [vault]
 daily_notes_folder = "Daily notes"
 output_folder = "Filtered feed"
+
+[embedding]
+model = "embeddinggemma-300m-qat-Q4_0"
+base_url = "http://127.0.0.1:8080/v1"
+store_path = "embedding_store.db"
+top_k = 5
+prompt_style = "none"
+top_quantile = 0.2
+top_quantile_arxiv = 0.1
+decay_lambda = 1.0
+umap_model_path = "umap_model.joblib"
+umap_growth_threshold = 0.1
+vault_bg_max = 500
 ```
+
+Relative paths (`seen_entries`, `store_path`, `umap_model_path`) are resolved against
+`--state-dir` (default: the current directory).
 
 Key settings:
 
 | Key | Description |
 |---|---|
 | `base_url` | Embedding server API endpoint |
-| `model` | Embedding model identifier as shown in LM Studio |
+| `model` | Model name sent to the server (llama-server ignores it); part of the store signature |
 | `store_path` | Path to the SQLite embedding database (created automatically) |
+| `prompt_style` | Text format sent for embedding: `none` (`title body`) or `document` (`title: … \| text: …`) |
 | `top_k` | Number of nearest-neighbour exemplars retrieved per entry |
 | `top_quantile` | Top fraction of reading entries to keep (0.20 → top 20 %) |
 | `top_quantile_arxiv` | Top fraction of arXiv entries to keep (separate threshold) |
 | `decay_lambda` | Exponential decay weight for score aggregation |
+| `timeout_seconds` | Per-feed fetch timeout; unresponsive feeds are skipped |
 | `seen_entries` | Path to the deduplication state file (created automatically) |
 | `daily_notes_folder` | Subfolder inside your vault containing daily notes |
 | `output_folder` | Subfolder inside your vault where digest notes are written |
+
+Changing `model` or `prompt_style` (or an upgrade that changes text cleaning) changes the
+store signature, and the embedding store is rebuilt automatically on the next run.
 
 ## Basic Usage
 
@@ -72,7 +89,7 @@ On the first run this will:
 5. Keep the top-scoring entries according to the configured quantile thresholds
 6. Write the digest to `<vault>/Filtered feed/RSS-YYYY-MM-DD.md`
 7. Write an interactive UMAP score visualisation to `<vault>/Filtered feed/RSS-YYYY-MM-DD-scores.html`
-8. Save seen entry GUIDs to `seen_entries.json` so they are skipped next time
+8. Save seen entry GUIDs to `seen_entries.json` (in `--state-dir`) so they are skipped next time
 
 ## All Flags
 
@@ -80,7 +97,7 @@ On the first run this will:
 |---|---|---|
 | `--vault PATH` | required | Path to your Obsidian vault root |
 | `--feeds PATH` | required | Path to your OPML subscriptions file |
-| `--config PATH` | `rss_filter/config.toml` | Path to a custom config file |
+| `--config PATH` | packaged `rss_filter/config.toml` | Path to a custom config file |
 | `--state-dir PATH` | current directory | Where the embedding store, seen entries and UMAP models live (relative config paths resolve against it) |
 | `--max-notes N` | all notes | Limit embedding build to the N most recent daily notes |
 | `--max-age-days N` | `7` | Only evaluate entries published within the last N days |
@@ -90,6 +107,7 @@ On the first run this will:
 | `--decay-lambda L` | config / `1.0` | Exponential decay weight for score aggregation |
 | `--rebuild-umap` | off | Force refit of the UMAP model on vault embeddings |
 | `--vault-bg-max N` | config / `500` | Max vault background points shown in the UMAP panel |
+| `--feed-timeout SECONDS` | config / `15` | Per-feed network timeout |
 | `--no-seen-filter` | off | Skip deduplication against `seen_entries.json` (testing) |
 | `--dry-run` | off | Print filtered entries to stdout; do not write a note |
 
@@ -194,7 +212,7 @@ space.
 
 ## Deduplication
 
-Every entry processed in a non-dry-run is recorded in `seen_entries.json`. On the next
+Every entry processed in a non-dry-run is recorded in `seen_entries.json` (in `--state-dir`). On the next
 run those entries are skipped regardless of their publication date. To reset
 deduplication state (e.g. to reprocess all current entries), delete the file:
 
@@ -208,4 +226,4 @@ rm seen_entries.json
 pytest tests/
 ```
 
-All tests use mocked HTTP calls and complete in under a second.
+All tests use mocked HTTP calls; no embedding server is needed.
