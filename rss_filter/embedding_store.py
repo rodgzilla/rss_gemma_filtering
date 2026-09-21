@@ -122,10 +122,6 @@ class EmbeddingStore:
             force_rebuild = True
 
         if force_rebuild:
-            self._conn.execute(_DROP_TABLE)
-            self._conn.execute(_CREATE_TABLE)
-            self._conn.commit()
-            self._cache = None
             existing: set[tuple[str, str]] = set()
         else:
             rows = self._conn.execute(_SELECT_EXISTING_KEYS).fetchall()
@@ -133,18 +129,18 @@ class EmbeddingStore:
 
         new_entries = [e for e in entries if (e.url, e.source) not in existing]
 
-        if signature:
-            self._set_meta("signature", signature)
-            self._conn.commit()
-
-        if not new_entries:
-            print(f"Embedding store: 0 new entries, {len(existing)} already stored.")
-            return force_rebuild
-
+        # Embed before touching the table: if the server fails half-way, the old
+        # rows and their signature survive and the next run retries the rebuild.
         texts = [_embed_text_for_entry(e, prompt_style) for e in new_entries]
-        embeddings = _embed_in_chunks(
-            client, texts, _EMBED_CHUNK_SIZE, desc="Embedding vault"
+        embeddings = (
+            _embed_in_chunks(client, texts, _EMBED_CHUNK_SIZE, desc="Embedding vault")
+            if new_entries
+            else []
         )
+
+        if force_rebuild:
+            self._conn.execute(_DROP_TABLE)
+            self._conn.execute(_CREATE_TABLE)
 
         rows_to_insert = [
             (
@@ -158,8 +154,14 @@ class EmbeddingStore:
             for entry, text, emb in zip(new_entries, texts, embeddings)
         ]
         self._conn.executemany(_INSERT_DOC, rows_to_insert)
+        if signature:
+            self._set_meta("signature", signature)
         self._conn.commit()
         self._cache = None
+
+        if not new_entries:
+            print(f"Embedding store: 0 new entries, {len(existing)} already stored.")
+            return force_rebuild
 
         print(
             f"Embedding store: {len(new_entries)} new entries embedded, "

@@ -273,6 +273,22 @@ class TestSignature:
             assert s.build_or_update(self._entries(), client2, signature="b") is False
         client2.embed_batch.assert_not_called()
 
+    def test_failed_rebuild_keeps_old_rows_and_retries(self, tmp_path):
+        db = str(tmp_path / "s.db")
+        with EmbeddingStore(db) as s:
+            s.build_or_update(
+                self._entries(), _make_client(self._vecs()), signature="a"
+            )
+        failing = MagicMock()
+        failing.embed_batch.side_effect = RuntimeError("server down")
+        with EmbeddingStore(db) as s:
+            with pytest.raises(RuntimeError):
+                s.build_or_update(self._entries(), failing, signature="b")
+            assert s.count() == 2
+        client = _make_client(self._vecs())
+        with EmbeddingStore(db) as s:
+            assert s.build_or_update(self._entries(), client, signature="b") is True
+
     def test_old_schema_without_meta_is_rebuilt(self, tmp_path):
         import sqlite3
 
