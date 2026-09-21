@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import re
 import socket
+import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
 
 import feedparser
-import listparser
 
 from rss_filter.models import RSSEntry
 
@@ -47,13 +47,12 @@ def _is_timeout_exception(exc: Optional[BaseException]) -> bool:
 
 def parse_opml(opml_path: Path) -> List[Tuple[str, str]]:
     """Parse an OPML file and return list of (title, feed_url) tuples."""
-    result = listparser.parse(opml_path.read_text(encoding="utf-8"))
+    root = ET.parse(opml_path).getroot()
     feeds = []
-    for feed in result.feeds:
-        title = getattr(feed, "title", "") or ""
-        url = getattr(feed, "url", "") or ""
+    for outline in root.iter("outline"):
+        url = outline.get("xmlUrl") or ""
         if url:
-            feeds.append((title, url))
+            feeds.append((outline.get("title") or outline.get("text") or "", url))
     return feeds
 
 

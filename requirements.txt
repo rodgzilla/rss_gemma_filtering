@@ -1,6 +1,5 @@
 openai
 feedparser
-listparser
 tqdm
 numpy
 umap-learn

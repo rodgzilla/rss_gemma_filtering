@@ -70,6 +70,50 @@ def test_parse_opml_extracts_title_and_url(tmp_path):
     assert "https://export.arxiv.org/rss/cs.LG" in urls
 
 
+def test_parse_opml_handles_nested_category_outlines(tmp_path):
+    opml_file = tmp_path / "subs.opml"
+    opml_file.write_text(textwrap.dedent("""\
+        <?xml version="1.0" encoding="UTF-8"?>
+        <opml version="2.0">
+          <head><title>My Feeds</title></head>
+          <body>
+            <outline text="Tech" title="Tech">
+              <outline text="Ars Technica" title="Ars Technica" type="rss"
+                       xmlUrl="https://feeds.arstechnica.com/arstechnica/index"/>
+              <outline text="Research">
+                <outline text="ArXiv CS.LG" title="ArXiv CS.LG" type="rss"
+                         xmlUrl="https://export.arxiv.org/rss/cs.LG"/>
+              </outline>
+            </outline>
+          </body>
+        </opml>
+    """))
+
+    feeds = parse_opml(opml_file)
+
+    assert feeds == [
+        ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index"),
+        ("ArXiv CS.LG", "https://export.arxiv.org/rss/cs.LG"),
+    ]
+
+
+def test_parse_opml_falls_back_to_text_when_title_missing(tmp_path):
+    opml_file = tmp_path / "subs.opml"
+    opml_file.write_text(textwrap.dedent("""\
+        <?xml version="1.0" encoding="UTF-8"?>
+        <opml version="2.0">
+          <body>
+            <outline text="Only Text" type="rss"
+                     xmlUrl="https://example.com/feed.xml"/>
+          </body>
+        </opml>
+    """))
+
+    feeds = parse_opml(opml_file)
+
+    assert feeds == [("Only Text", "https://example.com/feed.xml")]
+
+
 # ---------------------------------------------------------------------------
 # classify_is_arxiv
 # ---------------------------------------------------------------------------
