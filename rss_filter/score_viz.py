@@ -23,7 +23,7 @@ import umap
 
 from rss_filter.embedding_store import EmbeddingStore
 from rss_filter.models import FilterResult
-from rss_filter.score_filter import MATRYOSHKA_DIM
+from rss_filter.score_filter import mrl_truncate
 
 # ---------------------------------------------------------------------------
 # Per-feed dot grid colour palette
@@ -102,6 +102,7 @@ def build_or_load_umap(
     sidecar ``.meta.json`` file.  Refit is triggered when:
     - ``force_rebuild`` is True, or
     - The cached model file does not exist, or
+    - The cached meta lacks ``mrl_normalised`` (fitted on raw truncations), or
     - The vault has grown by more than ``growth_threshold`` (fraction) since
       the model was last fitted.
 
@@ -129,7 +130,14 @@ def build_or_load_umap(
     model_exists = Path(model_path).exists()
 
     growth = (n_current - n_fitted) / max(n_fitted, 1)
-    needs_rebuild = force_rebuild or not model_exists or growth > growth_threshold
+    # Caches fitted on raw (un-normalised) truncations must be refit.
+    mrl_normalised = meta.get("mrl_normalised", False)
+    needs_rebuild = (
+        force_rebuild
+        or not model_exists
+        or not mrl_normalised
+        or growth > growth_threshold
+    )
 
     if needs_rebuild:
         print(
@@ -142,7 +150,7 @@ def build_or_load_umap(
             vault_2d = np.zeros((n_current, 2), dtype=np.float32)
         else:
             matrix = np.stack(
-                [d["embedding"][:MATRYOSHKA_DIM] for d in vault_docs], axis=0
+                [mrl_truncate(d["embedding"]) for d in vault_docs], axis=0
             ).astype(np.float32)
             reducer = umap.UMAP(**_UMAP_PARAMS)
             vault_2d = reducer.fit_transform(matrix).astype(np.float32)
@@ -154,6 +162,7 @@ def build_or_load_umap(
             "fitted_at": date.today().isoformat(),
             "vault_2d": vault_2d_list,
             "vault_urls": [d["url"] for d in vault_docs],
+            "mrl_normalised": True,
         }
         _save_umap_meta(model_path, meta)
         print(f"  UMAP model saved to {model_path}.")

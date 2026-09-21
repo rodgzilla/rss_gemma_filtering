@@ -563,6 +563,66 @@ class TestBuildOrLoadUmapSourceFilter:
         assert vault_docs == []
 
 
+class TestBuildOrLoadUmapMrlNormalisation:
+    def test_meta_records_mrl_normalised(self, tmp_path):
+        store = _make_mock_store(_fake_vault_docs(20))
+        model_path = str(tmp_path / "umap.joblib")
+        build_or_load_umap(store=store, model_path=model_path)
+        meta = json.loads(Path(model_path).with_suffix(".meta.json").read_text())
+        assert meta["mrl_normalised"] is True
+
+    def test_fit_matrix_rows_are_unit_norm(self, tmp_path, monkeypatch):
+        import rss_filter.score_viz as sv
+
+        captured = {}
+
+        class _FakeUMAP:
+            def __init__(self, **kwargs):
+                pass
+
+            def fit_transform(self, matrix):
+                captured["matrix"] = matrix
+                return np.zeros((matrix.shape[0], 2), dtype=np.float32)
+
+        monkeypatch.setattr(sv.umap, "UMAP", _FakeUMAP)
+        monkeypatch.setattr(sv.joblib, "dump", lambda *a, **k: None)
+        store = _make_mock_store(_fake_vault_docs(10))
+        build_or_load_umap(store=store, model_path=str(tmp_path / "umap.joblib"))
+        norms = np.linalg.norm(captured["matrix"], axis=1)
+        np.testing.assert_allclose(norms, 1.0, rtol=1e-5)
+        assert captured["matrix"].shape == (10, 128)
+
+    def test_cache_without_mrl_flag_is_rebuilt(self, tmp_path):
+        docs = _fake_vault_docs(20)
+        store = _make_mock_store(docs)
+        model_path = str(tmp_path / "umap.joblib")
+        build_or_load_umap(store=store, model_path=model_path)
+
+        # Simulate a cache written before MRL re-normalisation existed.
+        meta_path = Path(model_path).with_suffix(".meta.json")
+        meta = json.loads(meta_path.read_text())
+        del meta["mrl_normalised"]
+        meta["fitted_at"] = "stale"
+        meta_path.write_text(json.dumps(meta))
+
+        build_or_load_umap(store=store, model_path=model_path)
+        new_meta = json.loads(meta_path.read_text())
+        assert new_meta["mrl_normalised"] is True
+        assert new_meta["fitted_at"] != "stale"
+
+    def test_cache_with_mrl_flag_is_reused(self, tmp_path):
+        store = _make_mock_store(_fake_vault_docs(20))
+        model_path = str(tmp_path / "umap.joblib")
+        build_or_load_umap(store=store, model_path=model_path)
+        meta_path = Path(model_path).with_suffix(".meta.json")
+        meta = json.loads(meta_path.read_text())
+        meta["fitted_at"] = "cached"
+        meta_path.write_text(json.dumps(meta))
+
+        build_or_load_umap(store=store, model_path=model_path)
+        assert json.loads(meta_path.read_text())["fitted_at"] == "cached"
+
+
 class TestWriteScoreVizArxivVault:
     """Tests for arXiv-specific vault params in write_score_viz."""
 

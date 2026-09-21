@@ -14,6 +14,13 @@ from rss_filter.text_prep import clean_summary, format_for_embedding
 MATRYOSHKA_DIM = 128
 
 
+def mrl_truncate(emb: np.ndarray, dim: int = MATRYOSHKA_DIM) -> np.ndarray:
+    """First *dim* Matryoshka dimensions, re-normalised to unit length."""
+    head = emb[:dim]
+    norm = np.linalg.norm(head)
+    return head / norm if norm else head
+
+
 def _exponential_decay_score(similarities: list[float], decay_lambda: float) -> float:
     """Aggregate a ranked list of cosine similarities using exponential decay weighting.
 
@@ -62,7 +69,7 @@ def score_entries(
         results:               list[FilterResult] — one per entry, keep/score/reason set
         entry_metadata:        list[dict] — per-entry data for the visualisation:
                                {"embedding": np.ndarray (full-dim),
-                                "embedding_128": np.ndarray (Matryoshka 128-dim),
+                                "embedding_128": np.ndarray (Matryoshka 128-dim, unit norm),
                                 "exemplars": [{"text": str, "score": float}],
                                 "agg_score": float,
                                 "is_arxiv": bool}
@@ -105,7 +112,7 @@ def score_entries(
         entry_metadata.append(
             {
                 "embedding": emb,
-                "embedding_128": emb[:MATRYOSHKA_DIM],
+                "embedding_128": mrl_truncate(emb),
                 "exemplars": [
                     {
                         "text": ex["text"],

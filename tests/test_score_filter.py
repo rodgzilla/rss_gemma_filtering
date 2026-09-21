@@ -7,7 +7,11 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from rss_filter.score_filter import _exponential_decay_score, score_entries
+from rss_filter.score_filter import (
+    _exponential_decay_score,
+    mrl_truncate,
+    score_entries,
+)
 from rss_filter.models import RSSEntry
 
 
@@ -159,6 +163,16 @@ class TestScoreEntries:
         _, meta, _, _ = score_entries(entries, store, embed_client, top_k=1)
         assert meta[0]["embedding_128"].shape == (128,)
 
+    def test_metadata_embedding_128_is_unit_norm(self):
+        entries = [_entry("A")]
+        emb = np.r_[np.full(128, 0.1), np.ones(640)].astype(np.float32)
+        embed_client = MagicMock()
+        embed_client.embed_batch.return_value = [emb]
+        store = MagicMock()
+        store.query.return_value = [{"text": "x", "url": "u", "score": 0.8}]
+        _, meta, _, _ = score_entries(entries, store, embed_client, top_k=1)
+        assert np.linalg.norm(meta[0]["embedding_128"]) == pytest.approx(1.0, abs=1e-6)
+
     def test_input_order_preserved(self):
         entries = [_entry(f"E{i}") for i in range(5)]
         embed_client, store = _make_mocks([[0.5]] * 5)
@@ -190,3 +204,26 @@ class TestScoreEntries:
         embed_client, store = _make_mocks([[0.5]])
         score_entries([entry], store, embed_client, top_k=1, prompt_style="document")
         embed_client.embed_batch.assert_called_once_with(["title: T | text: Hi"])
+
+
+# ---------------------------------------------------------------------------
+# mrl_truncate
+# ---------------------------------------------------------------------------
+
+
+class TestMrlTruncate:
+    def test_truncated_vector_is_unit_norm(self):
+        emb = np.r_[np.full(128, 0.1), np.ones(640)]
+        out = mrl_truncate(emb)
+        assert out.shape == (128,)
+        assert np.linalg.norm(out) == pytest.approx(1.0)
+
+    def test_direction_preserved(self):
+        emb = np.r_[np.arange(1, 129, dtype=float), np.ones(640)]
+        out = mrl_truncate(emb)
+        np.testing.assert_allclose(out, emb[:128] / np.linalg.norm(emb[:128]))
+
+    def test_zero_vector_returned_unchanged(self):
+        out = mrl_truncate(np.zeros(768))
+        assert out.shape == (128,)
+        assert not out.any()
