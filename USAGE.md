@@ -19,7 +19,7 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Edit `config.toml` before your first run:
+Edit `rss_filter/config.toml` before your first run:
 
 ```toml
 [embedding]
@@ -80,7 +80,8 @@ On the first run this will:
 |---|---|---|
 | `--vault PATH` | required | Path to your Obsidian vault root |
 | `--feeds PATH` | required | Path to your OPML subscriptions file |
-| `--config PATH` | `config.toml` | Path to a custom config file |
+| `--config PATH` | `rss_filter/config.toml` | Path to a custom config file |
+| `--state-dir PATH` | current directory | Where the embedding store, seen entries and UMAP models live (relative config paths resolve against it) |
 | `--max-notes N` | all notes | Limit embedding build to the N most recent daily notes |
 | `--max-age-days N` | `7` | Only evaluate entries published within the last N days |
 | `--rebuild-embeddings` | off | Force full rebuild of the embedding database from scratch |

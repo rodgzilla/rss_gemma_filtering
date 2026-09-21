@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rss-gemma-filtering"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["openai", "feedparser", "tqdm", "numpy", "umap-learn", "joblib"]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-mock"]
+
+[project.scripts]
+rss-filter = "rss_filter.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rss_filter*"]
+
+[tool.setuptools.package-data]
+rss_filter = ["config.toml"]

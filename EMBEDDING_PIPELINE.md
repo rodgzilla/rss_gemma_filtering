@@ -83,7 +83,7 @@ Two independent quantile thresholds are applied after all scores are computed:
 - **arXiv entries** (`top_quantile_arxiv`, default 0.05): keep entries at or above the
   95th percentile of all arXiv entry scores (tighter, since arXiv volume is high).
 
-Both thresholds can be overridden at the command line or in `config.toml`.
+Both thresholds can be overridden at the command line or in `rss_filter/config.toml`.
 
 ---
 
@@ -153,7 +153,7 @@ RSS feeds (OPML)
 
 ## Configuration
 
-All settings live under the `[embedding]` section of `config.toml`:
+All settings live under the `[embedding]` section of `rss_filter/config.toml`:
 
 ```toml
 [embedding]
@@ -183,4 +183,4 @@ vault_bg_max         = 500
 | `rss_filter/rss_fetcher.py` | Fetch and deduplicate RSS entries from OPML feeds |
 | `rss_filter/note_writer.py` | Render kept entries as an Obsidian markdown digest note |
 | `rss_filter/models.py` | Data models: `NoteEntry`, `RSSEntry`, `FilterResult` |
-| `main.py` | CLI entry point |
+| `rss_filter/cli.py` | CLI entry point (`main.py` is a thin shim; installed as `rss-filter`) |

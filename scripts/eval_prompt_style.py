@@ -160,7 +160,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--feeds", type=Path, required=True, help="OPML feed list")
     parser.add_argument("--base-url", default=None, help="Embedding server /v1 URL")
     parser.add_argument("--model", default=None, help="Embedding model name")
-    parser.add_argument("--config", type=Path, default=Path("config.toml"))
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path(__file__).resolve().parent.parent / "rss_filter" / "config.toml",
+    )
     args = parser.parse_args(argv)
 
     from rss_filter.embedding_client import EmbeddingClient

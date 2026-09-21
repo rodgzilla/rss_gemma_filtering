@@ -9,8 +9,8 @@ daily_notes_folder = "Daily notes"
 output_folder = "Filtered feed"
 
 [embedding]
-model = "text-embedding-embeddinggemma-300m-qat"
-base_url = "http://localhost:1234/v1"
+model = "embeddinggemma-300m-qat-Q4_0"  # label only: llama-server ignores it, but it is part of the store signature
+base_url = "http://127.0.0.1:8080/v1"
 store_path = "embedding_store.db"
 top_k = 5
 prompt_style = "none"     # embedding text format: "none" (title body) or "document" (title: … | text: …)
