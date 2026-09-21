@@ -203,13 +203,15 @@ class TestEmbedTextForEntry:
             == "title: Title | text: more text"
         )
 
-    def test_document_style_falls_back_to_url_body(self):
-        entry = self._entry("")
-        assert _embed_text_for_entry(entry, style="document") == "title: Title | text: u"
-
-    def test_title_only_context_falls_back_to_url(self):
+    def test_title_only_entry_embeds_just_the_title(self):
         entry = self._entry("Title")
-        assert _embed_text_for_entry(entry, style="document") == "title: Title | text: u"
+        assert _embed_text_for_entry(entry) == "Title"
+        assert _embed_text_for_entry(entry, style="document") == "title: Title | text: "
+
+    def test_falls_back_to_url_only_without_title_or_body(self):
+        entry = self._entry("", title="")
+        assert _embed_text_for_entry(entry) == "u"
+        assert _embed_text_for_entry(entry, style="document") == "title: none | text: u"
 
     def test_none_style_is_title_then_body(self):
         entry = self._entry("Title more text")

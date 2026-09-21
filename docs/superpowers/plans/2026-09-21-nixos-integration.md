@@ -321,7 +321,7 @@ class EmbeddingClient:
 **Files:** Modify `rss_filter/embedding_store.py`, `rss_filter/score_filter.py`; create `scripts/eval_prompt_style.py`; tests.
 
 - [ ] **Step 1: Failing tests.**
-  - `tests/test_embedding_store.py`: `_embed_text_for_entry(NoteEntry(url="u", context="Title more text", source="reading", date="2024-01-01", title="Title"), style="document") == "title: Title | text: more text"`. A context-less entry gives `"title: Title | text: u"` (the URL fallback is kept as body).
+  - `tests/test_embedding_store.py`: `_embed_text_for_entry(NoteEntry(url="u", context="Title more text", source="reading", date="2024-01-01", title="Title"), style="document") == "title: Title | text: more text"`. A title-only entry embeds just the title (as before); the URL is used only when there is neither title nor body.
   - `tests/test_score_filter.py`: with a mocked `embed_client`, `score_entries(..., prompt_style="none")` on an entry whose summary is `"<p>Hi</p>"` sends `"T Hi"`.
 - [ ] **Step 2: Implement.**
   - `embedding_store._embed_text_for_entry(entry, style)`: `body = context` minus a leading `entry.title` (`notes_parser` puts the title first), falling back to `entry.url` when empty. Then `format_for_embedding(entry.title, body, style)`.

@@ -47,14 +47,17 @@ def _embed_text_for_entry(entry: NoteEntry, style: str = "none") -> str:
     """Return the text to embed for a vault note entry.
 
     ``notes_parser`` puts the title first in ``context``; it is stripped off so the
-    body can be formatted exactly like a feed entry's (title, body). An empty body
-    falls back to the entry URL.
+    body can be formatted exactly like a feed entry's (title, body). The URL is
+    only used when there is neither a title nor a body, as before: appending it to
+    every link-only entry would add URL noise to the vector.
     """
     title = (entry.title or "").strip()
     body = (entry.context or "").strip()
     if title and body.startswith(title):
         body = body[len(title) :].strip()
-    return format_for_embedding(title, body or entry.url, style)
+    if not title and not body:
+        body = entry.url
+    return format_for_embedding(title, body, style)
 
 
 class EmbeddingStore:
