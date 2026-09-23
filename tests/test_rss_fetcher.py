@@ -18,8 +18,10 @@ from rss_filter.rss_fetcher import (
     fetch_feed,
     filter_by_age,
     filter_new_entries,
+    load_feeds,
     load_seen_guids,
     parse_opml,
+    parse_rss_dashboard,
     save_seen_guids,
 )
 
@@ -112,6 +114,146 @@ def test_parse_opml_falls_back_to_text_when_title_missing(tmp_path):
     feeds = parse_opml(opml_file)
 
     assert feeds == [("Only Text", "https://example.com/feed.xml")]
+
+
+# ---------------------------------------------------------------------------
+# parse_rss_dashboard
+# ---------------------------------------------------------------------------
+
+# Shape of .rss-dashboard-data/data.json, trimmed to the keys the parser reads.
+SAMPLE_DASHBOARD = {
+    "feeds": [
+        {
+            "title": "Ars Technica",
+            "url": "https://feeds.arstechnica.com/arstechnica/index",
+            "folder": "Science/Technology",
+            "feedId": "aaaa",
+        },
+        {
+            "title": "Some Youtuber",
+            "url": "https://www.youtube.com/feeds/videos.xml?channel_id=x",
+            "folder": "Social media/Youtube",
+            "feedId": "bbbb",
+        },
+    ],
+    "folders": [{"name": "Science", "subfolders": []}],
+    "refreshInterval": 720,
+}
+
+
+def _write_dashboard(tmp_path, data, name="data.json"):
+    path = tmp_path / name
+    path.write_text(json.dumps(data))
+    return path
+
+
+def test_parse_rss_dashboard_extracts_title_and_url(tmp_path):
+    data_file = _write_dashboard(tmp_path, SAMPLE_DASHBOARD)
+
+    feeds = parse_rss_dashboard(data_file)
+
+    assert feeds == [
+        ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index"),
+        ("Some Youtuber", "https://www.youtube.com/feeds/videos.xml?channel_id=x"),
+    ]
+
+
+def test_parse_rss_dashboard_drops_feeds_in_an_excluded_folder_subtree(tmp_path):
+    data_file = _write_dashboard(tmp_path, SAMPLE_DASHBOARD)
+
+    feeds = parse_rss_dashboard(data_file, exclude_folders=["Social media"])
+
+    assert feeds == [
+        ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index")
+    ]
+
+
+def test_parse_rss_dashboard_matches_excluded_folders_on_path_boundaries(tmp_path):
+    # "Social" must not swallow "Social media": exclusion is per path segment,
+    # not a bare string prefix.
+    data_file = _write_dashboard(tmp_path, SAMPLE_DASHBOARD)
+
+    feeds = parse_rss_dashboard(data_file, exclude_folders=["Social"])
+
+    assert len(feeds) == 2
+
+
+def test_parse_rss_dashboard_drops_feeds_excluded_from_refresh(tmp_path):
+    data = {
+        "feeds": [
+            {
+                "title": "Paused",
+                "url": "https://example.com/paused.xml",
+                "folder": "Other",
+                "excludeFromRefresh": True,
+            },
+            {
+                "title": "Active",
+                "url": "https://example.com/active.xml",
+                "folder": "Other",
+                "excludeFromRefresh": False,
+            },
+        ]
+    }
+    data_file = _write_dashboard(tmp_path, data)
+
+    feeds = parse_rss_dashboard(data_file)
+
+    assert feeds == [("Active", "https://example.com/active.xml")]
+
+
+def test_parse_rss_dashboard_drops_feeds_without_a_url(tmp_path):
+    data = {"feeds": [{"title": "Broken", "folder": "Other"}]}
+    data_file = _write_dashboard(tmp_path, data)
+
+    assert parse_rss_dashboard(data_file) == []
+
+
+def test_parse_rss_dashboard_keeps_feeds_with_no_folder(tmp_path):
+    data = {"feeds": [{"title": "Loose", "url": "https://example.com/loose.xml"}]}
+    data_file = _write_dashboard(tmp_path, data)
+
+    feeds = parse_rss_dashboard(data_file, exclude_folders=["Social media"])
+
+    assert feeds == [("Loose", "https://example.com/loose.xml")]
+
+
+def test_parse_rss_dashboard_falls_back_to_the_url_when_title_missing(tmp_path):
+    data = {"feeds": [{"url": "https://example.com/untitled.xml", "folder": "Other"}]}
+    data_file = _write_dashboard(tmp_path, data)
+
+    feeds = parse_rss_dashboard(data_file)
+
+    assert feeds == [
+        ("https://example.com/untitled.xml", "https://example.com/untitled.xml")
+    ]
+
+
+# ---------------------------------------------------------------------------
+# load_feeds
+# ---------------------------------------------------------------------------
+
+
+def test_load_feeds_reads_the_dashboard_format_from_a_json_file(tmp_path):
+    data_file = _write_dashboard(tmp_path, SAMPLE_DASHBOARD)
+
+    feeds = load_feeds(data_file, exclude_folders=["Social media"])
+
+    assert feeds == [
+        ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index")
+    ]
+
+
+def test_load_feeds_reads_opml_from_a_non_json_file(tmp_path):
+    opml_file = tmp_path / "subs.opml"
+    opml_file.write_text(SAMPLE_OPML)
+
+    feeds = load_feeds(opml_file)
+
+    assert feeds == [
+        ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index"),
+        ("ArXiv CS.LG", "https://export.arxiv.org/rss/cs.LG"),
+    ]
 
 
 # ---------------------------------------------------------------------------

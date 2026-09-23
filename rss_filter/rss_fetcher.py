@@ -1,4 +1,4 @@
-"""Fetch RSS feeds from an OPML file and manage seen-entry state."""
+"""Fetch RSS feeds from a subscription list and manage seen-entry state."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
+from typing import Iterable, List, Optional, Sequence, Set, Tuple
 
 import feedparser
 
@@ -54,6 +54,52 @@ def parse_opml(opml_path: Path) -> List[Tuple[str, str]]:
         if url:
             feeds.append((outline.get("title") or outline.get("text") or "", url))
     return feeds
+
+
+def _in_excluded_folder(folder: str, exclude_folders: Iterable[str]) -> bool:
+    """True if `folder` is one of `exclude_folders` or sits under one.
+
+    Folder paths are slash-separated ("Social media/Youtube"), so matching is
+    per path segment: excluding "Social" must not drop "Social media".
+    """
+    return any(
+        folder == excluded or folder.startswith(f"{excluded}/")
+        for excluded in exclude_folders
+    )
+
+
+def parse_rss_dashboard(
+    data_path: Path, exclude_folders: Sequence[str] = ()
+) -> List[Tuple[str, str]]:
+    """Parse an RSS Dashboard data.json and return (title, feed_url) tuples.
+
+    That file is the Obsidian plugin's whole state; only its top-level "feeds"
+    array is a subscription list. Feeds the plugin has paused
+    (excludeFromRefresh) are skipped, as are those in an excluded folder.
+    """
+    data = json.loads(data_path.read_text(encoding="utf-8"))
+    feeds = []
+    for feed in data.get("feeds", []):
+        url = feed.get("url") or ""
+        if not url or feed.get("excludeFromRefresh"):
+            continue
+        if _in_excluded_folder(feed.get("folder") or "", exclude_folders):
+            continue
+        feeds.append((feed.get("title") or url, url))
+    return feeds
+
+
+def load_feeds(
+    feeds_path: Path, exclude_folders: Sequence[str] = ()
+) -> List[Tuple[str, str]]:
+    """Load a subscription list, dispatching on the file's format.
+
+    `.json` is the RSS Dashboard export; anything else is OPML, which carries
+    no folder information and so ignores `exclude_folders`.
+    """
+    if feeds_path.suffix.lower() == ".json":
+        return parse_rss_dashboard(feeds_path, exclude_folders)
+    return parse_opml(feeds_path)
 
 
 def classify_is_arxiv(feed_url: str, entry_url: str) -> bool:

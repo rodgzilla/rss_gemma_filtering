@@ -15,7 +15,7 @@ Start an embedding server (see [below](#embedding-server)), then:
 pip install .            # installs the `rss-filter` command
 rss-filter \
   --vault ~/Documents/MyVault \
-  --feeds ~/Documents/subscriptions.opml \
+  --feeds ~/Documents/MyVault/.rss-dashboard-data/data.json \
   --state-dir ~/.local/state/rss-filter
 ```
 
@@ -58,7 +58,7 @@ imports = [ inputs.rss-filter.homeModules.default ];
 programs.rss-filter = {
   enable = true;
   vault = "/home/me/Documents/MyVault";   # required
-  feeds = "/home/me/feeds.opml";          # required
+  feeds = "/home/me/Documents/MyVault/.rss-dashboard-data/data.json"; # required
   # stateDir defaults to "${config.xdg.stateHome}/rss-filter";
   # package defaults to this flake's packages.default.
   settings.embedding.top_k = 7;           # any config.toml key; the rest keep the packaged defaults

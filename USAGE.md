@@ -8,7 +8,8 @@
   EmbeddingGemma 300M QAT Q4_0 (command line in the [README](README.md#embedding-server)).
   Other servers (e.g. LM Studio) work too; set `base_url` accordingly.
 - An Obsidian vault with daily notes under `Daily notes/YYYY-MM-DD.md`
-- An OPML export of your RSS subscriptions
+- A subscription list: the RSS Dashboard Obsidian plugin's
+  `<vault>/.rss-dashboard-data/data.json`, or an OPML export
 
 ## Installation
 
@@ -77,13 +78,14 @@ store signature, and the embedding store is rebuilt automatically on the next ru
 ## Basic Usage
 
 ```bash
-python main.py --vault /path/to/your/vault --feeds /path/to/subscriptions.opml
+python main.py --vault /path/to/your/vault \
+  --feeds /path/to/your/vault/.rss-dashboard-data/data.json
 ```
 
 On the first run this will:
 
 1. Parse all daily notes and embed every saved article into a local SQLite vector store
-2. Fetch all RSS feeds listed in the OPML file
+2. Fetch every subscribed feed, minus those in a `feeds.exclude_folders` folder
 3. Discard entries older than 7 days and entries already seen in a previous run
 4. Embed each new entry and score it by cosine similarity against the vault store
 5. Keep the top-scoring entries according to the configured quantile thresholds
@@ -96,7 +98,7 @@ On the first run this will:
 | Flag | Default | Description |
 |---|---|---|
 | `--vault PATH` | required | Path to your Obsidian vault root |
-| `--feeds PATH` | required | Path to your OPML subscriptions file |
+| `--feeds PATH` | required | Subscription list: an RSS Dashboard `data.json`, or an OPML export. `.json` selects the first, anything else the second |
 | `--config PATH` | packaged `rss_filter/config.toml` | Path to a custom config file |
 | `--state-dir PATH` | current directory | Where the embedding store, seen entries and UMAP models live (relative config paths resolve against it) |
 | `--max-notes N` | all notes | Limit embedding build to the N most recent daily notes |

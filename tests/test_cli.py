@@ -1,5 +1,6 @@
 """Tests for the packaged CLI entry point."""
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -61,3 +62,48 @@ def test_in_state_resolves_relative_only(tmp_path):
 def test_override_uses_is_not_none():
     assert cli._override(0.0, 0.25) == 0.0
     assert cli._override(None, 0.25) == 0.25
+
+
+def test_cli_reads_dashboard_json_and_applies_folder_exclusions(tmp_path, monkeypatch):
+    """The packaged config's exclude_folders keeps Social media out of a run."""
+    monkeypatch.setattr(cli, "EmbeddingClient", FakeEmbeddingClient)
+
+    feeds_file = tmp_path / "data.json"
+    feeds_file.write_text(
+        json.dumps(
+            {
+                "feeds": [
+                    {
+                        "title": "Kept",
+                        "url": "https://example.com/kept.xml",
+                        "folder": "Science/Data science",
+                    },
+                    {
+                        "title": "Dropped",
+                        "url": "https://example.com/dropped.xml",
+                        "folder": "Social media/Twitter",
+                    },
+                ]
+            }
+        )
+    )
+
+    fetched = []
+
+    def record(feed_url, feed_name, timeout=None):
+        fetched.append(feed_name)
+        return []
+
+    monkeypatch.setattr(cli, "fetch_feed", record)
+
+    cli.main(
+        [
+            "--vault", str(MOCK_VAULT),
+            "--feeds", str(feeds_file),
+            "--state-dir", str(tmp_path / "state"),
+            "--max-notes", "2",
+            "--dry-run",
+        ]
+    )
+
+    assert fetched == ["Kept"]

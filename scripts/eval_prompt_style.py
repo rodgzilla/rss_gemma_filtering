@@ -6,7 +6,7 @@ each prompt style reports how well the embedding score separates them:
 ROC-AUC and the precision of the top 20 % of items.
 
 Usage:
-    python scripts/eval_prompt_style.py --vault ~/vault --feeds feeds.opml \
+    python scripts/eval_prompt_style.py --vault ~/vault --feeds data.json \
         --base-url http://localhost:8080/v1
 """
 
@@ -142,10 +142,10 @@ def evaluate_style(
 
 
 def _fetch_negatives(feeds_path: Path, vault_urls: set[str], timeout: float):
-    from rss_filter.rss_fetcher import deduplicate_entries, fetch_feed, parse_opml
+    from rss_filter.rss_fetcher import deduplicate_entries, fetch_feed, load_feeds
 
     entries = []
-    for name, url in parse_opml(feeds_path):
+    for name, url in load_feeds(feeds_path):
         try:
             entries.extend(fetch_feed(url, name, timeout=timeout))
         except Exception as e:  # noqa: BLE001 - a dead feed must not stop the eval
@@ -157,7 +157,9 @@ def _fetch_negatives(feeds_path: Path, vault_urls: set[str], timeout: float):
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--vault", type=Path, required=True, help="Obsidian vault root")
-    parser.add_argument("--feeds", type=Path, required=True, help="OPML feed list")
+    parser.add_argument(
+        "--feeds", type=Path, required=True, help="data.json or OPML feed list"
+    )
     parser.add_argument("--base-url", default=None, help="Embedding server /v1 URL")
     parser.add_argument("--model", default=None, help="Embedding model name")
     parser.add_argument(

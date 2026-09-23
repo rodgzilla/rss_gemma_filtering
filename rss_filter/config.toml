@@ -1,6 +1,12 @@
 [paths]
 seen_entries = "seen_entries.json"
 
+[feeds]
+# Folder paths from the RSS Dashboard subscription list to leave out of a run,
+# matched per path segment: "Social media" also drops "Social media/Youtube".
+# Ignored for OPML subscription files, which carry no folders.
+exclude_folders = ["Social media", "Webcomic"]
+
 [fetch]
 timeout_seconds = 15  # per-feed network timeout; unresponsive feeds are skipped
 

@@ -57,7 +57,9 @@ before the old table is dropped, so a server failure mid-rebuild leaves the old 
 
 ## Step 2 — Fetch and Deduplicate RSS Entries
 
-- The OPML file is parsed to obtain feed URLs.
+- The subscription list is parsed to obtain feed URLs: an RSS Dashboard
+  `data.json` (feeds under a `feeds.exclude_folders` folder, and feeds the
+  plugin has paused, are skipped) or an OPML export.
 - Each feed is fetched via `feedparser`.
 - Entries already present in `seen_entries.json` are dropped (deduplication).
 - Cross-posted duplicates (same URL from multiple feeds) are removed.
@@ -138,8 +140,8 @@ Obsidian vault (Daily notes/*.md)
    embedding_store.db  (SQLite: url, text, source_note, date, embedding BLOB, title)
         │
         │
-RSS feeds (OPML)
-        │  rss_fetcher.parse_opml()
+RSS feeds (data.json / OPML)
+        │  rss_fetcher.load_feeds()
         │  rss_fetcher.fetch_feed() × N
         │  rss_fetcher.filter_new_entries()
         │  rss_fetcher.deduplicate_entries()
@@ -195,7 +197,7 @@ vault_bg_max          = 500
 | `rss_filter/score_filter.py` | Embed entries, retrieve exemplars, aggregate scores, apply quantile thresholds |
 | `rss_filter/score_viz.py` | Build and write the interactive UMAP HTML visualisation |
 | `rss_filter/notes_parser.py` | Parse vault daily notes into `NoteEntry` objects |
-| `rss_filter/rss_fetcher.py` | Fetch and deduplicate RSS entries from OPML feeds |
+| `rss_filter/rss_fetcher.py` | Load the subscription list, fetch and deduplicate RSS entries |
 | `rss_filter/note_writer.py` | Render kept entries as an Obsidian markdown digest note |
 | `rss_filter/models.py` | Data models: `NoteEntry`, `RSSEntry`, `FilterResult` |
 | `rss_filter/cli.py` | CLI entry point (`main.py` is a thin shim; installed as `rss-filter`) |

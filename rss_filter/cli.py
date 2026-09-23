@@ -19,7 +19,7 @@ from rss_filter.rss_fetcher import (
     filter_by_age,
     filter_new_entries,
     load_seen_guids,
-    parse_opml,
+    load_feeds,
     save_seen_guids,
 )
 from rss_filter.score_filter import score_entries
@@ -55,7 +55,13 @@ def main(argv: list[str] | None = None) -> None:
         "--vault", required=True, type=Path, help="Path to Obsidian vault"
     )
     parser.add_argument(
-        "--feeds", required=True, type=Path, help="Path to OPML subscriptions file"
+        "--feeds",
+        required=True,
+        type=Path,
+        help=(
+            "Path to the subscription list: an RSS Dashboard data.json "
+            "(typically <vault>/.rss-dashboard-data/data.json) or an OPML export"
+        ),
     )
     parser.add_argument(
         "--config",
@@ -198,6 +204,7 @@ def main(argv: list[str] | None = None) -> None:
 
     fetch_cfg = cfg.get("fetch", {})
     feed_timeout = _override(args.feed_timeout, fetch_cfg.get("timeout_seconds", 15))
+    exclude_folders = cfg.get("feeds", {}).get("exclude_folders", [])
 
     seen_path = Path(_in_state(state_dir, path_cfg["seen_entries"]))
 
@@ -220,9 +227,11 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  Embedding store contains {store.count()} documents.")
 
     # --- Step 2: Fetch RSS entries ---
-    print(f"\nParsing OPML: {args.feeds}")
-    feeds = parse_opml(args.feeds)
+    print(f"\nReading subscriptions: {args.feeds}")
+    feeds = load_feeds(args.feeds, exclude_folders=exclude_folders)
     print(f"  Found {len(feeds)} subscribed feeds.")
+    if exclude_folders:
+        print(f"  Excluded folders: {', '.join(exclude_folders)}")
 
     seen_guids = load_seen_guids(seen_path) if not args.no_seen_filter else set()
     all_entries = []

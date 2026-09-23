@@ -46,7 +46,11 @@ in
 
     feeds = lib.mkOption {
       type = lib.types.str;
-      description = "OPML subscriptions file.";
+      description = ''
+        Subscription list: an RSS Dashboard `data.json` (usually
+        `<vault>/.rss-dashboard-data/data.json`) or an OPML export. The
+        format is picked from the file extension.
+      '';
     };
 
     stateDir = lib.mkOption {
